@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "task-card": "/components/task-card/task-card"
+  },
+  "navigationBarTitleText": "我的工作台"
+}

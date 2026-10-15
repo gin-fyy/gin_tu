@@ -1,0 +1,122 @@
+.page {
+  padding: 20rpx;
+}
+
+/* 概览卡片 2x2 */
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-bottom: 4rpx;
+}
+.stat-card {
+  width: calc(50% - 10rpx);
+  margin-bottom: 20rpx;
+  text-align: center;
+  padding: 34rpx 24rpx;
+}
+.stat-card .v {
+  font-size: 44rpx;
+  font-weight: 700;
+}
+.stat-card .l {
+  font-size: 22rpx;
+  color: var(--muted);
+  margin-top: 8rpx;
+}
+
+.card-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-bottom: 24rpx;
+}
+.chart-card,
+.cat-card {
+  margin-bottom: 20rpx;
+}
+
+/* 柱状图 */
+.bars {
+  display: flex;
+  align-items: flex-end;
+}
+.bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.bar-count {
+  height: 28rpx;
+  font-size: 20rpx;
+  color: var(--muted);
+  margin-bottom: 6rpx;
+}
+.bar-track {
+  height: 240rpx;
+  display: flex;
+  align-items: flex-end;
+}
+.bar {
+  width: 30rpx;
+  border-radius: 10rpx;
+  background: var(--primary);
+}
+.bar.zero {
+  background: #E9EDF4;
+}
+.bar-label {
+  font-size: 20rpx;
+  color: var(--muted);
+  margin-top: 12rpx;
+}
+
+/* 分类分布 */
+.cat-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 22rpx;
+}
+.cat-row:last-child {
+  margin-bottom: 0;
+}
+.cat-name {
+  width: 130rpx;
+  font-size: 26rpx;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  margin-right: 10rpx;
+  flex-shrink: 0;
+}
+.cat-bar {
+  flex: 1;
+  height: 16rpx;
+  background: #F0F2F7;
+  border-radius: 999rpx;
+  overflow: hidden;
+  margin: 0 16rpx;
+}
+.cat-fill {
+  height: 100%;
+  border-radius: 999rpx;
+}
+.cat-num {
+  width: 140rpx;
+  text-align: right;
+  font-size: 22rpx;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.empty-small {
+  font-size: 24rpx;
+  color: var(--muted);
+  text-align: center;
+  padding: 30rpx 0;
+}

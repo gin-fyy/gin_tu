@@ -1,0 +1,10 @@
+# 依赖
+node_modules/
+
+# 微信开发者工具的个人配置（含本地路径、编译模式等）
+project.private.config.json
+
+# 系统与日志
+.DS_Store
+Thumbs.db
+*.log

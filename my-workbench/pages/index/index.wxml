@@ -1,0 +1,98 @@
+<view class="page">
+  <!-- 顶部概览 -->
+  <view class="hero">
+    <view class="greet">{{greeting}}，{{nickname}}</view>
+    <view class="dateline">{{dateText}}</view>
+    <view class="stat-strip">
+      <view class="stat-item">
+        <view class="num">{{stat.todo}}</view>
+        <view class="lbl">今日待办</view>
+      </view>
+      <view class="stat-item">
+        <view class="num">{{stat.done}}</view>
+        <view class="lbl">今日完成</view>
+      </view>
+      <view class="stat-item">
+        <view class="num {{stat.overdue ? 'warn' : ''}}">{{stat.overdue}}</view>
+        <view class="lbl">已逾期</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 快速添加 -->
+  <view class="quick card">
+    <input
+      class="qa-input"
+      placeholder="快速记一件事，默认加到今天"
+      placeholder-class="qa-ph"
+      value="{{quickTitle}}"
+      confirm-type="done"
+      bindinput="onQuickInput"
+      bindconfirm="onQuickAdd"
+    />
+    <view class="qa-btn" hover-class="qa-btn-hover" bindtap="onQuickAdd">添加</view>
+  </view>
+
+  <!-- 已逾期 -->
+  <block wx:if="{{overdue.length}}">
+    <view class="group-title danger">⚠️ 已逾期 · {{overdue.length}}</view>
+    <task-card
+      wx:for="{{overdue}}"
+      wx:key="id"
+      task="{{item}}"
+      cats="{{cats}}"
+      bindtoggle="onToggle"
+      bindedit="onEdit"
+      bindmore="onMore"
+    />
+  </block>
+
+  <!-- 今天 -->
+  <view class="group-title">今天 · {{today.length}}</view>
+  <block wx:if="{{today.length}}">
+    <task-card
+      wx:for="{{today}}"
+      wx:key="id"
+      task="{{item}}"
+      cats="{{cats}}"
+      bindtoggle="onToggle"
+      bindedit="onEdit"
+      bindmore="onMore"
+    />
+  </block>
+  <view wx:else class="empty card">
+    <view class="empty-icon">🌤️</view>
+    <view class="empty-text">今天还没有安排</view>
+    <view class="empty-sub">用上面的输入框快速记一件事，或点右下角 ＋ 新建详细任务</view>
+  </view>
+
+  <!-- 即将到来 -->
+  <block wx:if="{{upcoming.length}}">
+    <view class="group-title">即将到来 · {{upcomingTotal}}</view>
+    <task-card
+      wx:for="{{upcoming}}"
+      wx:key="id"
+      task="{{item}}"
+      cats="{{cats}}"
+      bindtoggle="onToggle"
+      bindedit="onEdit"
+      bindmore="onMore"
+    />
+  </block>
+
+  <!-- 无日期 -->
+  <block wx:if="{{inbox.length}}">
+    <view class="group-title">没有日期 · {{inbox.length}}</view>
+    <task-card
+      wx:for="{{inbox}}"
+      wx:key="id"
+      task="{{item}}"
+      cats="{{cats}}"
+      bindtoggle="onToggle"
+      bindedit="onEdit"
+      bindmore="onMore"
+    />
+  </block>
+
+  <view class="fab" hover-class="fab-hover" bindtap="onNewTask">＋</view>
+</view>

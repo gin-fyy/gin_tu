@@ -1,0 +1,126 @@
+.page {
+  padding: 20rpx 20rpx 60rpx;
+}
+
+.sec {
+  margin-bottom: 20rpx;
+}
+
+.field-label {
+  font-size: 24rpx;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 20rpx 0 14rpx;
+}
+.field-label:first-child {
+  margin-top: 0;
+}
+
+.ph {
+  color: #B9C0CE;
+}
+
+.t-input {
+  font-size: 34rpx;
+  font-weight: 600;
+  padding: 12rpx 0 20rpx;
+  border-bottom: 2rpx solid #F2F3F7;
+}
+.t-area {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 28rpx;
+  min-height: 120rpx;
+  padding: 12rpx 0;
+}
+
+/* 胶囊选项 */
+.opt-wrap {
+  display: flex;
+  flex-wrap: wrap;
+}
+.opt {
+  display: inline-flex;
+  align-items: center;
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid var(--border);
+  background: #FFFFFF;
+  font-size: 26rpx;
+  color: #5B6472;
+  margin: 0 16rpx 16rpx 0;
+}
+.opt.on {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+  font-weight: 600;
+}
+.opt-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  margin-right: 10rpx;
+  flex-shrink: 0;
+}
+
+/* 选择器行 */
+.pick-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.pick {
+  background: #F5F6FA;
+  border-radius: 14rpx;
+  padding: 16rpx 26rpx;
+  font-size: 28rpx;
+  margin-right: 16rpx;
+  margin-bottom: 8rpx;
+}
+.pick.small {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+  padding: 14rpx 24rpx;
+  margin: 0;
+}
+.pick-clear {
+  font-size: 24rpx;
+  color: var(--danger);
+  padding: 10rpx;
+}
+.pick-clear-hover {
+  opacity: 0.7;
+}
+
+/* 开关行 */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 26rpx 0 6rpx;
+  border-top: 2rpx solid #F5F6FA;
+  margin-top: 26rpx;
+}
+.switch-left {
+  flex: 1;
+  padding-right: 20rpx;
+}
+.s-title {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+.s-sub {
+  font-size: 22rpx;
+  color: var(--muted);
+  margin-top: 6rpx;
+  line-height: 1.5;
+}
+
+.actions {
+  margin-top: 10rpx;
+}
+.actions .btn-danger {
+  margin-top: 20rpx;
+}

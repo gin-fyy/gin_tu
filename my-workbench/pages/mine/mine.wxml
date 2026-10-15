@@ -1,0 +1,83 @@
+<view class="page">
+  <!-- 个人资料 -->
+  <view class="profile card">
+    <view class="avatar">{{avatar}}</view>
+    <view class="p-main">
+      <view class="name">{{nickname}}</view>
+      <view class="sub">让每一天都有条理</view>
+    </view>
+    <view class="edit" hover-class="edit-hover" bindtap="editNickname">✏️</view>
+  </view>
+
+  <!-- 分类管理 -->
+  <view class="card section">
+    <view class="section-head">分类管理</view>
+    <view class="cat-item" wx:for="{{cats}}" wx:key="id">
+      <view class="dot" style="background: {{item.color}};"></view>
+      <text class="cat-name">{{item.name}}</text>
+      <text class="cat-del" data-id="{{item.id}}" catchtap="delCat">删除</text>
+    </view>
+    <view class="cat-add">
+      <input
+        class="cat-input"
+        placeholder="新建分类名称"
+        placeholder-class="tpl-ph"
+        value="{{newCat}}"
+        confirm-type="done"
+        bindinput="onNewCatInput"
+        bindconfirm="addCat"
+      />
+      <view class="cat-add-btn" hover-class="cat-add-hover" bindtap="addCat">添加</view>
+    </view>
+  </view>
+
+  <!-- 订阅消息 -->
+  <view class="card section">
+    <view class="section-head">订阅消息模板 ID（可选）</view>
+    <view class="tip">用于任务到期推送。需要在微信公众平台申请订阅消息模板；个人测试阶段可留空，不影响本地提醒。</view>
+    <view class="row">
+      <input
+        class="tpl-input"
+        placeholder="tmpl-xxxxxx"
+        placeholder-class="tpl-ph"
+        value="{{templateId}}"
+        bindinput="onTplInput"
+      />
+      <view class="mini-btn" hover-class="cat-add-hover" bindtap="saveTpl">保存</view>
+    </view>
+    <view class="link" hover-class="cat-add-hover" bindtap="aboutRemind">❓ 提醒功能说明</view>
+  </view>
+
+  <!-- 数据管理 -->
+  <view class="card section">
+    <view class="cell" hover-class="cell-hover" bindtap="exportData">
+      <text>📋 导出数据到剪贴板</text>
+      <text class="arrow">›</text>
+    </view>
+    <view class="cell" hover-class="cell-hover" bindtap="toggleImport">
+      <text>📥 导入数据（粘贴 JSON）</text>
+      <text class="arrow">{{showImport ? '⌄' : '›'}}</text>
+    </view>
+    <view class="cell danger" hover-class="cell-hover" bindtap="clearData">
+      <text>🗑️ 清空所有数据</text>
+      <text class="arrow">›</text>
+    </view>
+    <view wx:if="{{showImport}}" class="import-box">
+      <textarea
+        class="import-area"
+        placeholder="把「导出数据到剪贴板」得到的内容粘贴到这里"
+        placeholder-class="tpl-ph"
+        value="{{importText}}"
+        maxlength="-1"
+        auto-height
+        bindinput="onImportInput"
+      />
+      <view class="import-actions">
+        <view class="mini-btn ghost" hover-class="cat-add-hover" bindtap="cancelImport">取消</view>
+        <view class="mini-btn" hover-class="cat-add-hover" bindtap="doImport">确认导入</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="footer">我的工作台 · v{{version}}</view>
+</view>

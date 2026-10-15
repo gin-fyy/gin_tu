@@ -1,0 +1,41 @@
+<view class="page">
+  <!-- 概览卡片 -->
+  <view class="cards">
+    <view class="stat-card card" wx:for="{{cards}}" wx:key="label">
+      <view class="v">{{item.value}}</view>
+      <view class="l">{{item.label}}</view>
+    </view>
+  </view>
+
+  <!-- 近7天柱状图 -->
+  <view class="card chart-card">
+    <view class="card-title">近 7 天完成情况</view>
+    <view class="bars">
+      <view class="bar-col" wx:for="{{days}}" wx:key="ds">
+        <view class="bar-count">{{item.count ? item.count : ''}}</view>
+        <view class="bar-track">
+          <view class="bar {{item.count ? '' : 'zero'}}" style="height: {{item.h}}%;"></view>
+        </view>
+        <view class="bar-label">{{item.label}}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 分类分布 -->
+  <view class="card cat-card">
+    <view class="card-title">分类完成分布</view>
+    <block wx:if="{{catStats.length}}">
+      <view class="cat-row" wx:for="{{catStats}}" wx:key="name">
+        <view class="cat-name">
+          <view class="dot" style="background: {{item.color}};"></view>
+          <text>{{item.name}}</text>
+        </view>
+        <view class="cat-bar">
+          <view class="cat-fill" style="width: {{item.pct}}%; background: {{item.color}};"></view>
+        </view>
+        <view class="cat-num">{{item.count}} · {{item.pct}}%</view>
+      </view>
+    </block>
+    <view wx:else class="empty-small">完成第一个任务后，这里会展示数据</view>
+  </view>
+</view>

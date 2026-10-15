@@ -1,0 +1,17 @@
+<view class="tcard {{task.done ? 'is-done' : ''}}" hover-class="tc-hover" bindtap="onTap" bindlongpress="onLongPress">
+  <view class="check {{view.priorityClass}} {{task.done ? 'checked' : ''}}" catchtap="onToggle">
+    <text wx:if="{{task.done}}" class="mark">✓</text>
+  </view>
+  <view class="main">
+    <view class="title-line">
+      <text class="title">{{task.title}}</text>
+      <text wx:if="{{view.repeatLabel && !task.done}}" class="repeat">🔁 {{view.repeatLabel}}</text>
+    </view>
+    <view class="meta">
+      <text class="cat" style="color: {{view.categoryColor}}; background: {{view.categoryBg}};">{{view.categoryName}}</text>
+      <text wx:if="{{view.dateText}}" class="date {{view.overdue ? 'is-overdue' : ''}}">{{view.overdue ? '已逾期 · ' : ''}}{{view.dateText}}</text>
+      <text wx:if="{{view.timeLabel && !task.done}}" class="time">⏰ {{view.timeLabel}}</text>
+      <text wx:if="{{task.priority === 2 && !task.done}}" class="urgent">🔥 紧急</text>
+    </view>
+  </view>
+</view>

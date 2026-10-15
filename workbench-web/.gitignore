@@ -1,0 +1,14 @@
+# 依赖与构建产物
+node_modules/
+.toolchain/
+android/
+dist/
+.gradle/
+
+# 打包/工具生成物（图标已纳入版本管理，这里是临时文件）
+*.zip
+
+# 系统与日志
+.DS_Store
+Thumbs.db
+*.log

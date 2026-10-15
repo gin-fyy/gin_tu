@@ -1,0 +1,107 @@
+.tcard {
+  display: flex;
+  align-items: flex-start;
+  background: #FFFFFF;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  box-shadow: 0 2rpx 10rpx rgba(31, 41, 55, 0.04);
+}
+.tc-hover {
+  background: #F7F9FF;
+}
+
+/* 勾选圈：边框色 = 优先级 */
+.check {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  border: 4rpx solid #C6CCDA;
+  margin: 4rpx 20rpx 0 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.check.p-high {
+  border-color: #EF4444;
+}
+.check.p-mid {
+  border-color: #F59E0B;
+}
+.check.p-low {
+  border-color: #10B981;
+}
+.check.checked {
+  background: var(--primary, #4C6EF5);
+  border-color: var(--primary, #4C6EF5);
+}
+.mark {
+  color: #FFFFFF;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+.title-line {
+  display: flex;
+  align-items: center;
+}
+.title {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #23272F;
+  word-break: break-all;
+}
+.is-done .title {
+  text-decoration: line-through;
+  color: #A6ADBE;
+}
+.is-done {
+  opacity: 0.72;
+}
+.repeat {
+  font-size: 22rpx;
+  color: #8A93A6;
+  margin-left: 12rpx;
+  flex-shrink: 0;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12rpx;
+}
+.cat {
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 8rpx;
+  margin-right: 12rpx;
+}
+.date {
+  font-size: 22rpx;
+  color: #8A93A6;
+  margin-right: 12rpx;
+}
+.date.is-overdue {
+  color: #EF4444;
+  font-weight: 600;
+}
+.time {
+  font-size: 22rpx;
+  color: #8A93A6;
+  margin-right: 12rpx;
+}
+.urgent {
+  font-size: 20rpx;
+  color: #EF4444;
+  background: #FEECEC;
+  padding: 2rpx 10rpx;
+  border-radius: 8rpx;
+}

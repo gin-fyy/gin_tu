@@ -1,0 +1,106 @@
+/* ===== 主题变量 & 全局样式 ===== */
+page {
+  --primary: #4C6EF5;
+  --primary-light: #EEF1FE;
+  --bg: #F5F6FA;
+  --card: #FFFFFF;
+  --text: #23272F;
+  --muted: #8A93A6;
+  --danger: #EF4444;
+  --warning: #F59E0B;
+  --success: #10B981;
+  --border: #ECEEF3;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 28rpx;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', 'Microsoft YaHei', sans-serif;
+}
+
+/* 通用卡片 */
+.card {
+  background: var(--card);
+  border-radius: 20rpx;
+  padding: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(31, 41, 55, 0.04);
+  box-sizing: border-box;
+}
+
+/* 通用按钮 */
+.btn-primary {
+  background: var(--primary);
+  color: #FFFFFF;
+  border-radius: 16rpx;
+  text-align: center;
+  padding: 24rpx 0;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+.btn-primary-hover {
+  opacity: 0.85;
+}
+.btn-danger {
+  background: #FFFFFF;
+  color: var(--danger);
+  border: 2rpx solid #F5C6C6;
+  border-radius: 16rpx;
+  text-align: center;
+  padding: 22rpx 0;
+  font-size: 30rpx;
+}
+
+/* 分组标题 */
+.group-title {
+  font-size: 26rpx;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 36rpx 4rpx 16rpx;
+}
+.group-title.danger {
+  color: var(--danger);
+}
+
+/* 空状态 */
+.empty {
+  padding: 60rpx 30rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--muted);
+}
+.empty-icon {
+  font-size: 72rpx;
+  margin-bottom: 16rpx;
+}
+.empty-text {
+  font-size: 28rpx;
+  color: #5B6472;
+}
+.empty-sub {
+  font-size: 24rpx;
+  margin-top: 10rpx;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* 悬浮新建按钮 */
+.fab {
+  position: fixed;
+  right: 36rpx;
+  bottom: 60rpx;
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #FFFFFF;
+  font-size: 56rpx;
+  font-weight: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10rpx 26rpx rgba(76, 110, 245, 0.42);
+  z-index: 50;
+}
+.fab-hover {
+  transform: scale(0.92);
+  opacity: 0.92;
+}

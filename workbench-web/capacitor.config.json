@@ -1,0 +1,18 @@
+{
+  "appId": "com.workbench.local",
+  "appName": "我的工作台",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": true
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#4C6EF5"
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "resetWhenUpdate": true
+    }
+  }
+}

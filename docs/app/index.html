@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>我的工作台</title>
+<meta name="description" content="任务管理 + 到期提醒 + 完成统计，数据全部存在本机" />
+<meta name="theme-color" content="#4C6EF5" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-title">我的工作台</div>
+    <div class="topbar-sub" id="topSub"></div>
+    <button class="icon-btn" id="btnInstall" hidden>安装到桌面</button>
+  </header>
+
+  <main>
+    <!-- ===================== 工作台 ===================== -->
+    <section class="view" id="view-home">
+      <div class="hero card">
+        <div class="greet" id="homeGreet">你好</div>
+        <div class="dateline" id="homeDate"></div>
+        <div class="stat-strip">
+          <div class="stat-item"><div class="num" id="homeTodo">0</div><div class="lbl">今日待办</div></div>
+          <div class="stat-item"><div class="num" id="homeDone">0</div><div class="lbl">今日完成</div></div>
+          <div class="stat-item"><div class="num" id="homeOverdue">0</div><div class="lbl">已逾期</div></div>
+        </div>
+      </div>
+
+      <div class="quick card">
+        <input id="quickInput" class="qa-input" placeholder="快速记一件事，默认加到今天" />
+        <button id="quickAdd" class="qa-btn">添加</button>
+      </div>
+
+      <div id="homeGroups"></div>
+    </section>
+
+    <!-- ===================== 任务 ===================== -->
+    <section class="view" id="view-tasks" hidden>
+      <div class="search card">
+        <span class="search-icon">🔍</span>
+        <input id="searchInput" class="search-input" placeholder="搜索标题或备注" />
+        <button id="searchClear" class="search-clear" hidden>✕</button>
+      </div>
+
+      <div class="seg card" id="statusSeg">
+        <button class="seg-item on" data-status="active">进行中</button>
+        <button class="seg-item" data-status="done">已完成</button>
+        <button class="seg-item" data-status="all">全部</button>
+      </div>
+
+      <div class="chips" id="catChips"></div>
+      <div class="count-line" id="tasksCount"></div>
+      <div id="taskGroups"></div>
+    </section>
+
+    <!-- ===================== 统计 ===================== -->
+    <section class="view" id="view-stats" hidden>
+      <div class="cards" id="statCards"></div>
+      <div class="card">
+        <div class="card-title">近 7 天完成情况</div>
+        <div class="bars" id="bars"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">分类完成分布</div>
+        <div id="catStats"></div>
+      </div>
+    </section>
+
+    <!-- ===================== 我的 ===================== -->
+    <section class="view" id="view-mine" hidden>
+      <div class="card profile">
+        <div class="avatar" id="mineAvatar">我</div>
+        <div class="p-main">
+          <div class="name" id="mineName">打工人</div>
+          <div class="sub">让每一天都有条理</div>
+        </div>
+        <button class="edit" id="editNick">✏️</button>
+      </div>
+
+      <div class="card">
+        <div class="section-head">分类管理</div>
+        <div id="catList"></div>
+        <div class="cat-add">
+          <input id="newCatInput" class="cat-input" placeholder="新建分类名称" />
+          <button id="addCatBtn" class="mini-btn">添加</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">提醒</div>
+        <div class="tip">网页版：页面开着时用系统通知提醒（到期 2 小时内，每个时间点只提醒一次）。装成手机 App（APK）后改用系统定时通知，关掉 App 也能收到。</div>
+        <div class="row">
+          <button id="notifyPerm" class="mini-btn">开启通知权限</button>
+          <button id="notifyTest" class="mini-btn ghost">测试通知</button>
+        </div>
+        <div class="tip" id="notifyState" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">偏好设置</div>
+        <div class="switch-row">
+          <div class="switch-left">
+            <div class="s-title">完成任务时二次确认</div>
+            <div class="s-sub">勾选任务时先弹确认，防误触（取消完成不需要确认）</div>
+          </div>
+          <input type="checkbox" id="confirmDoneSwitch" class="switch" checked />
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">更新</div>
+        <div class="row" style="justify-content:space-between">
+          <span>当前版本</span>
+          <span class="tip" id="versionLine">—</span>
+        </div>
+        <div class="tip" style="margin-top:8px">更新地址：电脑上跑 <b>node _tools/serve.js</b> 时会打印一个局域网地址，填到下面就能检查更新（手机需与电脑同一个 Wi-Fi）。</div>
+        <div class="row" style="margin-top:10px">
+          <input id="updateBaseInput" class="cat-input" placeholder="http://192.168.x.x:5173" />
+          <button class="mini-btn" id="updateBaseSave">保存</button>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="mini-btn" id="checkUpdateBtn">检查更新</button>
+          <button class="mini-btn ghost" id="checkOtaBtn">检查热更新</button>
+        </div>
+        <div class="tip" id="updateState" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">数据</div>
+        <div class="cell" id="exportBtn"><span>📋 导出（下载 JSON 文件）</span><span class="arrow">›</span></div>
+        <div class="cell" id="copyBtn"><span>📎 复制到剪贴板</span><span class="arrow">›</span></div>
+        <div class="cell" id="importBtn"><span>📥 导入（选择文件 / 粘贴）</span><span class="arrow">›</span></div>
+        <div class="cell danger" id="clearBtn"><span>🗑️ 清空所有数据</span><span class="arrow">›</span></div>
+        <div class="tip" id="storageState" style="margin-top:10px"></div>
+      </div>
+
+      <div class="footer" id="appFooter">我的工作台</div>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab on" data-view="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7" rx="2" fill="currentColor" stroke="none"></rect>
+        <rect x="14" y="3" width="7" height="7" rx="2"></rect>
+        <rect x="3" y="14" width="7" height="7" rx="2"></rect>
+        <rect x="14" y="14" width="7" height="7" rx="2" fill="currentColor" stroke="none"></rect>
+      </svg>
+      <span>工作台</span>
+    </button>
+    <button class="tab" data-view="tasks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="8.5"></circle>
+        <path d="M8.4 12.4l2.6 2.6 4.6-5.6"></path>
+      </svg>
+      <span>任务</span>
+    </button>
+    <button class="tab" data-view="stats">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <rect x="4" y="12" width="4" height="8" rx="1.5"></rect>
+        <rect x="10" y="8" width="4" height="12" rx="1.5"></rect>
+        <rect x="16" y="4" width="4" height="16" rx="1.5"></rect>
+      </svg>
+      <span>统计</span>
+    </button>
+    <button class="tab" data-view="mine">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="8" r="3.6"></circle>
+        <path d="M4.8 20c.6-4 3.6-6 7.2-6s6.6 2 7.2 6"></path>
+      </svg>
+      <span>我的</span>
+    </button>
+  </nav>
+
+  <button class="fab" id="fabNew" title="新建任务">＋</button>
+</div>
+
+<!-- ===================== 新建 / 编辑任务 ===================== -->
+<div class="sheet-mask" id="sheetMask" hidden>
+  <div class="sheet" id="sheetTask" hidden>
+    <div class="sheet-head">
+      <span id="sheetTitle">新建任务</span>
+      <button class="sheet-close" id="sheetClose">✕</button>
+    </div>
+    <div class="sheet-body">
+      <label class="field">
+        <span class="field-label">标题</span>
+        <input id="fTitle" placeholder="要做什么？" />
+      </label>
+      <label class="field">
+        <span class="field-label">备注</span>
+        <textarea id="fNote" rows="2" placeholder="补充说明（可选）"></textarea>
+      </label>
+      <div class="field">
+        <span class="field-label">分类</span>
+        <div class="opt-wrap" id="fCats"></div>
+      </div>
+      <div class="field">
+        <span class="field-label">优先级</span>
+        <div class="opt-wrap" id="fPriorities">
+          <button class="opt" data-act="pickPriority" data-v="2">🔥 高</button>
+          <button class="opt on" data-act="pickPriority" data-v="1">⚡ 中</button>
+          <button class="opt" data-act="pickPriority" data-v="0">🌱 低</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">时间</span>
+        <div class="pick-row">
+          <input type="date" id="fDate" />
+          <input type="time" id="fTime" />
+          <button class="mini-btn ghost" id="fClearDate">清除</button>
+        </div>
+      </div>
+      <div class="switch-row">
+        <div class="switch-left">
+          <div class="s-title">到期提醒</div>
+          <div class="s-sub">需选日期和时间，到期后提醒一次</div>
+        </div>
+        <input type="checkbox" id="fRemind" class="switch" />
+      </div>
+      <div class="switch-row">
+        <div class="switch-left">
+          <div class="s-title">重复</div>
+          <div class="s-sub">完成后自动滚到下一周期，再点一次可撤销</div>
+        </div>
+        <select id="fRepeat">
+          <option value="none">不重复</option>
+          <option value="daily">每天</option>
+          <option value="weekly">每周</option>
+          <option value="monthly">每月</option>
+        </select>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn-primary" id="fSave">创建任务</button>
+      <button class="btn-danger" id="fDelete" hidden>删除任务</button>
+    </div>
+  </div>
+
+  <!-- ===================== 导入 ===================== -->
+  <div class="sheet" id="sheetImport" hidden>
+    <div class="sheet-head">
+      <span>导入数据</span>
+      <button class="sheet-close" id="importClose">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="tip">选一个之前导出的 JSON 文件，或直接把内容粘贴到下面。导入是覆盖式的（会替换任务、分类与完成记录）。</div>
+      <input type="file" id="importFile" accept=".json,application/json" />
+      <textarea id="importText" rows="8" placeholder="把导出的 JSON 粘贴到这里"></textarea>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn-primary" id="importDo">确认导入（覆盖当前数据）</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="js/core.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

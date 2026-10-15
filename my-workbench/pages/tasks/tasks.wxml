@@ -1,0 +1,61 @@
+<view class="page">
+  <!-- 搜索 -->
+  <view class="search card">
+    <text class="search-icon">🔍</text>
+    <input
+      class="search-input"
+      placeholder="搜索标题或备注"
+      placeholder-class="search-ph"
+      value="{{keyword}}"
+      confirm-type="search"
+      bindinput="onSearch"
+    />
+    <text wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch">✕</text>
+  </view>
+
+  <!-- 状态筛选 -->
+  <view class="seg card">
+    <view
+      wx:for="{{statusTabs}}"
+      wx:key="key"
+      class="seg-item {{status === item.key ? 'on' : ''}}"
+      data-key="{{item.key}}"
+      bindtap="onStatus"
+    >{{item.label}}</view>
+  </view>
+
+  <!-- 分类筛选 -->
+  <scroll-view class="chips" scroll-x enhanced show-scrollbar="{{false}}">
+    <view
+      wx:for="{{chips}}"
+      wx:key="id"
+      class="chip {{catFilter === item.id ? 'on' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="onChip"
+    >{{item.name}}</view>
+  </scroll-view>
+
+  <view class="count-line" wx:if="{{total}}">共 {{total}} 项 · 点按编辑，长按更多</view>
+
+  <!-- 分组列表 -->
+  <block wx:for="{{groups}}" wx:key="key" wx:for-item="group">
+    <view class="group-title {{group.danger ? 'danger' : ''}}">{{group.title}}</view>
+    <task-card
+      wx:for="{{group.tasks}}"
+      wx:key="id"
+      task="{{item}}"
+      cats="{{cats}}"
+      bindtoggle="onToggle"
+      bindedit="onEdit"
+      bindmore="onMore"
+    />
+  </block>
+
+  <view wx:if="{{!total}}" class="empty card">
+    <view class="empty-icon">🗂️</view>
+    <view class="empty-text">这里还没有任务</view>
+    <view class="empty-sub">点右下角 ＋ 新建一个吧</view>
+  </view>
+
+  <view class="fab" hover-class="fab-hover" bindtap="onNewTask">＋</view>
+</view>

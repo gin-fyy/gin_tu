@@ -1,0 +1,31 @@
+{
+  "name": "workbench-web",
+  "version": "1.1.1",
+  "private": true,
+  "description": "我的工作台：零依赖网页版（双击即用）+ Capacitor 安卓壳",
+  "scripts": {
+    "test": "node tests/check-web.js && node tests/logic-tests.js",
+    "test:ui": "node tests/ui-smoke.js",
+    "test:apk": "node _tools/inspect-apk.js",
+    "icons": "node _tools/gen-app-icons.js",
+    "serve": "node _tools/serve.js",
+    "toolchain": "node _tools/install-toolchain.js",
+    "android:add": "cap add android",
+    "android:sync": "cap sync android",
+    "apk": "node _tools/build-apk.js",
+    "ota": "node _tools/build-ota.js",
+    "pages": "node _tools/build-pages.js",
+    "ship": "node _tools/ship.js"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/browser": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/local-notifications": "^7.0.0",
+    "@capgo/capacitor-updater": "^7.51.23"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "jsdom": "^30.1.2"
+  }
+}

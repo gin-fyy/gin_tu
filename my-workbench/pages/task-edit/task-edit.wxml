@@ -1,0 +1,90 @@
+<view class="page">
+  <!-- 标题 & 备注 -->
+  <view class="card sec">
+    <view class="field-label">标题</view>
+    <input
+      class="t-input"
+      placeholder="要做什么？"
+      placeholder-class="ph"
+      value="{{title}}"
+      confirm-type="done"
+      bindinput="onTitle"
+    />
+    <view class="field-label">备注</view>
+    <textarea
+      class="t-area"
+      placeholder="补充说明（可选）"
+      placeholder-class="ph"
+      value="{{note}}"
+      maxlength="200"
+      auto-height
+      bindinput="onNote"
+    />
+  </view>
+
+  <!-- 分类 & 优先级 -->
+  <view class="card sec">
+    <view class="field-label">分类</view>
+    <view class="opt-wrap">
+      <view
+        wx:for="{{cats}}"
+        wx:key="id"
+        class="opt {{category === item.id ? 'on' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="pickCat"
+      >
+        <view class="opt-dot" style="background: {{item.color}};"></view>
+        <text>{{item.name}}</text>
+      </view>
+    </view>
+
+    <view class="field-label">优先级</view>
+    <view class="opt-wrap">
+      <view
+        wx:for="{{priorities}}"
+        wx:key="v"
+        class="opt {{priority === item.v ? 'on' : ''}}"
+        data-v="{{item.v}}"
+        bindtap="pickPriority"
+      >{{item.label}}</view>
+    </view>
+  </view>
+
+  <!-- 时间 & 提醒 & 重复 -->
+  <view class="card sec">
+    <view class="field-label">时间</view>
+    <view class="pick-row">
+      <picker mode="date" start="{{dateStart}}" value="{{date}}" bindchange="onDate">
+        <view class="pick {{date ? '' : 'ph'}}">{{date || '选择日期'}}</view>
+      </picker>
+      <picker mode="time" value="{{time}}" disabled="{{!date}}" bindchange="onTime">
+        <view class="pick {{time ? '' : 'ph'}}">{{time || '选择时间'}}</view>
+      </picker>
+      <view wx:if="{{date}}" class="pick-clear" hover-class="pick-clear-hover" bindtap="clearDate">清除</view>
+    </view>
+
+    <view class="switch-row">
+      <view class="switch-left">
+        <view class="s-title">到期提醒</view>
+        <view class="s-sub">到期后打开小程序时弹窗提醒（需选日期和时间）</view>
+      </view>
+      <switch checked="{{remind}}" color="#4C6EF5" bindchange="onRemind" />
+    </view>
+
+    <view class="switch-row">
+      <view class="switch-left">
+        <view class="s-title">重复</view>
+        <view class="s-sub">完成后自动滚到下一个周期</view>
+      </view>
+      <picker range="{{repeatLabels}}" value="{{repeatIndex}}" bindchange="onRepeat">
+        <view class="pick small">{{repeatLabels[repeatIndex]}}</view>
+      </picker>
+    </view>
+  </view>
+
+  <!-- 操作 -->
+  <view class="actions">
+    <view class="btn-primary" hover-class="btn-primary-hover" bindtap="save">{{isEdit ? '保存修改' : '创建任务'}}</view>
+    <view wx:if="{{isEdit}}" class="btn-danger" hover-class="btn-primary-hover" bindtap="remove">删除任务</view>
+  </view>
+</view>

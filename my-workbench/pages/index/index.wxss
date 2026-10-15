@@ -1,0 +1,71 @@
+.page {
+  padding: 20rpx 20rpx 180rpx;
+}
+
+/* 顶部横幅 */
+.hero {
+  background: linear-gradient(135deg, #4C6EF5 0%, #7B96F9 100%);
+  border-radius: 24rpx;
+  padding: 36rpx 32rpx;
+  color: #FFFFFF;
+  margin-bottom: 20rpx;
+}
+.greet {
+  font-size: 38rpx;
+  font-weight: 700;
+}
+.dateline {
+  font-size: 24rpx;
+  opacity: 0.85;
+  margin-top: 8rpx;
+}
+.stat-strip {
+  display: flex;
+  margin-top: 30rpx;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 16rpx;
+  padding: 22rpx 0;
+}
+.stat-item {
+  flex: 1;
+  text-align: center;
+}
+.num {
+  font-size: 42rpx;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.num.warn {
+  color: #FFE3C2;
+}
+.lbl {
+  font-size: 22rpx;
+  opacity: 0.85;
+  margin-top: 6rpx;
+}
+
+/* 快速添加 */
+.quick {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4rpx;
+}
+.qa-input {
+  flex: 1;
+  font-size: 28rpx;
+}
+.qa-ph {
+  color: #B9C0CE;
+}
+.qa-btn {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 26rpx;
+  font-weight: 600;
+  padding: 14rpx 30rpx;
+  border-radius: 14rpx;
+  margin-left: 20rpx;
+}
+.qa-btn-hover {
+  opacity: 0.8;
+}

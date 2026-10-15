@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的工作台</title>
+<style>
+  body{margin:0;padding:28px 18px 60px;font:16px/1.65 -apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:#F5F6FA;color:#23272F}
+  .wrap{max-width:520px;margin:0 auto}
+  h1{font-size:22px;margin:6px 0 2px}
+  .sub{color:#8A93A6;font-size:13px;margin-bottom:20px}
+  .card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 12px rgba(31,41,55,.06);margin-bottom:14px}
+  .row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #F2F3F7;font-size:14px}
+  .row:last-child{border-bottom:none}
+  .k{color:#8A93A6}
+  .btn{display:block;text-align:center;background:#4C6EF5;color:#fff;text-decoration:none;border-radius:12px;padding:15px 0;font-weight:600;margin-top:14px}
+  .btn.ghost{background:#F0F2F7;color:#5B6472;font-weight:500;padding:12px 0;font-size:15px}
+  .tip{font-size:13px;color:#8A93A6;line-height:1.7}
+  ol{padding-left:20px;font-size:14px;color:#5B6472;margin:8px 0 0}
+  code{background:#F2F3F7;border-radius:5px;padding:1px 6px;font-size:12px;word-break:break-all}
+</style></head><body><div class="wrap">
+  <h1>我的工作台</h1>
+  <div class="sub">任务管理 + 到期提醒 + 完成统计，数据存在你手机/浏览器本机</div>
+
+  <div class="card">
+    <div class="row"><span class="k">安卓版</span><span>1.1.1 (2)</span></div>
+    <div class="row"><span class="k">构建时间</span><span>2026-10-15 13:54:56</span></div>
+    <div class="row"><span class="k">安装包大小</span><span>5.63 MB</span></div>
+    <a class="btn" href="update/workbench-debug.apk">下载 Android 安装包（APK）</a>
+    <a class="btn ghost" href="app/index.html">直接打开网页版</a>
+  </div>
+
+  <div class="card">
+    <div class="tip"><b>安装步骤</b></div>
+    <ol>
+      <li>点上面的「下载 Android 安装包」</li>
+      <li>下载完点通知栏的文件，或到「文件管理 → Download」点它</li>
+      <li>系统问是否允许安装未知应用 → 允许 → 安装</li>
+      <li>覆盖安装会保留数据（<b>不要先卸载</b>）</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <div class="tip"><b>App 里的「更新地址」填</b><br><code id="base"></code></div>
+    <div class="tip" style="margin-top:8px">填好之后：点「检查更新」下载新 APK；点「检查热更新」只换网页层，不用重装。</div>
+    <div class="row" style="margin-top:10px"><span class="k">热更新包数量</span><span>2</span></div>
+  </div>
+
+  <script>
+    // 更新地址就是这个站点的根目录
+    document.getElementById('base').textContent = location.origin + location.pathname.replace(/\/?$/, '');
+  </script>
+</div></body></html>

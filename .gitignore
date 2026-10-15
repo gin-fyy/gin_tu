@@ -1,0 +1,17 @@
+# 依赖与构建工具链（体积大、可重新生成，不入库）
+node_modules/
+.toolchain/
+.git-toolchain/
+workbench-web/node_modules/
+workbench-web/.toolchain/
+workbench-web/android/
+workbench-web/dist/
+.gradle/
+
+# 微信开发者工具的个人配置
+project.private.config.json
+
+# 系统与日志
+.DS_Store
+Thumbs.db
+*.log
