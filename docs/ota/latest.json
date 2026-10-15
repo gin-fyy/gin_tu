@@ -1,8 +1,8 @@
 {
-  "version": "1.1.3-20261015T151802",
-  "url": "http://localhost:5173/ota/www-1.1.3-20261015T151802.zip",
-  "checksum": "6a23e4eadc40dbd9dea187a5b6816ebae35e8dd9941fa41d1873cda150914cf6",
+  "version": "1.1.4-20261015T153855",
+  "url": "http://localhost:5173/ota/www-1.1.4-20261015T153855.zip",
+  "checksum": "b72dfc3418b03ec0d25ecaa5351b28fbc38d6cb7569a7885afe155288e7dd3a5",
   "size": 48375,
   "files": 11,
-  "builtAt": "2026-10-15T15:18:02.592Z"
+  "builtAt": "2026-10-15T15:38:55.195Z"
 }

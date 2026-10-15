@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.1.3';
+  var APP_VERSION = '1.1.4';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可在「我的 → 更新地址」改成任意能提供 update/ 与 ota/ 目录的地址（支持多行，从上往下试）。
   var DEFAULT_UPDATE_BASE = 'https://cdn.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs';
