@@ -15,6 +15,7 @@
     "apk": "node _tools/build-apk.js",
     "ota": "node _tools/build-ota.js",
     "pages": "node _tools/build-pages.js",
+    "push": "node _tools/push-github.js",
     "ship": "node _tools/ship.js"
   },
   "dependencies": {

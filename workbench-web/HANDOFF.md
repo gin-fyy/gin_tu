@@ -3,6 +3,11 @@
 > 目标：把「我的工作台」做成自用软件 —— **网页版 + 安卓 APK**。两者都已完成并验证。
 >
 > 当前版本 **v1.1.1**（APK versionCode 2）：完成任务二次确认（默认开启，可在「我的 → 偏好设置」关闭）；App 内可「检查更新」（装新 APK）与「检查热更新」（只换网页层）。
+>
+> **已上传 GitHub**：https://github.com/gin-fyy/gin_tu （2026-10-15，98 个文件 / 6.19 MB，含 `docs/` 发布目录）。
+> 推送方式：本机装了便携 git（`.git-toolchain/git`，因为系统没有 git）+ 浏览器登录（Git Credential Manager，已缓存凭据，之后 push 不用再登录）。
+> ⚠️ 如果 Steam++（Watt Toolkit）开着 GitHub 加速，它会把 github.com 指到 127.0.0.1 做中间人，git 的证书校验会失败 → 推送前先关掉它的 GitHub 加速（hosts 会恢复，实测直连可用）。
+> 待办：仓库 `Settings → Pages → main / docs` 开启 Pages 后，更新源即为 `https://gin-fyy.github.io/gin_tu`。
 
 ## 一、最终状态：全部完成 ✅
 
