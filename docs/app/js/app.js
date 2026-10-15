@@ -61,6 +61,14 @@
     } catch (e) { return null; }
   })();
 
+  // 自更新插件（本地原生插件 native-plugins/apk-installer）：应用内下载 APK + 拉起系统安装器
+  var ApkInstaller = (function () {
+    try {
+      var C = window.Capacitor;
+      return (C && C.Plugins && C.Plugins.ApkInstaller) ? C.Plugins.ApkInstaller : null;
+    } catch (e) { return null; }
+  })();
+
   // 当前版本：优先读打包时生成的 www/version.json（APK 里有），取不到就用内联常量
   var LOCAL_VERSION = { version: window.WB.APP_VERSION, versionCode: 0 };
 
@@ -101,35 +109,75 @@
     return base + '/' + u.replace(/^\/+/, '');
   }
 
-  /* APK 自更新：读远端 version.json → 比较 → 打开下载页（系统安装器会再确认一次） */
-  function checkApkUpdate() {
-    var base = (S.getSettings().updateBase || '').trim().replace(/\/+$/, '');
-    if (!base) {
-      setUpdateState('先填更新地址：电脑上跑 node _tools/serve.js，它打印的局域网地址填到上面。');
-      return;
-    }
-    setUpdateState('正在检查…');
-    fetch(base + '/update/version.json', { cache: 'no-store' })
-      .then(function (r) {
+  // 带超时的 JSON 请求（不依赖 AbortController，WebView 与 jsdom 都能跑）
+  function fetchJson(url, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        reject(new Error('超时'));
+      }, timeoutMs || 8000);
+      fetch(url, { cache: 'no-store' }).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
-      })
-      .then(function (remote) {
-        var res = window.WB.update.evaluate(LOCAL_VERSION, remote, base);
+      }).then(function (json) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(json);
+      }).catch(function (e) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        reject(e);
+      });
+    });
+  }
+
+  // 依次尝试多个更新地址，返回第一个可用的：{ base, json }
+  // 全部失败时抛出带原因的 Error（不写 console，方便界面直接展示）
+  function fetchFirstJson(bases, pathSuffix, timeoutMs) {
+    var i = 0;
+    var failed = [];
+    function tryNext() {
+      if (i >= bases.length) {
+        var why = failed.length ? failed.slice(0, 2).join('；') : '没有可用的更新地址';
+        return Promise.reject(new Error('所有更新地址都连不上（' + why + '）'));
+      }
+      var base = bases[i++];
+      return fetchJson(base + pathSuffix, timeoutMs).then(function (json) {
+        return { base: base, json: json };
+      }).catch(function (e) {
+        failed.push(base.replace(/^https?:\/\//, '') + ' → ' + e.message);
+        return tryNext();
+      });
+    }
+    return tryNext();
+  }
+
+  /* APK 自更新：读远端 version.json → 比较 → 打开下载页（系统安装器会再确认一次） */
+  function checkApkUpdate() {
+    var bases = window.WB.update.parseBases(S.getSettings().updateBase);
+    if (!bases.length) {
+      setUpdateState('先填更新地址：可填多个，一行一个（例如 CDN 地址 + 电脑上 node _tools/serve.js 打印的局域网地址）。');
+      return;
+    }
+    setUpdateState('正在检查（' + bases.length + ' 个地址）…');
+    fetchFirstJson(bases, '/update/version.json')
+      .then(function (hit) {
+        var res = window.WB.update.evaluate(LOCAL_VERSION, hit.json, hit.base);
         if (!res.hasUpdate) {
-          setUpdateState('已是最新版本（' + LOCAL_VERSION.version + '）');
+          setUpdateState('已是最新版本（' + LOCAL_VERSION.version + '）· 源：' + hit.base);
           toast('已是最新版本');
           return;
         }
-        setUpdateState('发现新版本 ' + res.latestVersion + '（当前 ' + LOCAL_VERSION.version + '）');
-        if (window.confirm('发现新版本 ' + res.latestVersion +
-          '\n当前版本 ' + LOCAL_VERSION.version +
-          '\n\n现在去下载吗？会用浏览器打开下载页，装完数据保留。')) {
-          openUpdatePage(res.pageUrl);
-        }
+        setUpdateState('发现新版本 ' + res.latestVersion + '（当前 ' + LOCAL_VERSION.version + '）· 源：' + hit.base);
+        res.raw = hit.json;
+        showUpdateModal(res);
       })
       .catch(function (e) {
-        setUpdateState('检查失败：' + e.message + '（确认手机和电脑在同一个 Wi-Fi，且 serve.js 正在运行）');
+        setUpdateState('检查失败：' + e.message + '（可在「更新地址」里填多个来源，一行一个，会自动依次尝试）');
       });
   }
 
@@ -139,27 +187,24 @@
       setUpdateState('热更新只在手机 App（APK）里可用；网页版刷新页面就是最新。');
       return;
     }
-    var base = (S.getSettings().updateBase || '').trim().replace(/\/+$/, '');
-    if (!base) {
+    var bases = window.WB.update.parseBases(S.getSettings().updateBase);
+    if (!bases.length) {
       setUpdateState('先填更新地址');
       return;
     }
-    setUpdateState('正在检查热更新…');
-    fetch(base + '/ota/latest.json', { cache: 'no-store' })
-      .then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status + '（先跑 npm.cmd run ota）');
-        return r.json();
-      })
-      .then(function (remote) {
+    setUpdateState('正在检查热更新（' + bases.length + ' 个地址）…');
+    fetchFirstJson(bases, '/ota/latest.json')
+      .then(function (hit) {
+        var remote = hit.json;
         if (!remote || !remote.version || !remote.url) throw new Error('latest.json 缺少 version/url');
         return Promise.resolve(Updater.current()).catch(function () { return { version: '' }; }).then(function (cur) {
           if (cur && cur.version === remote.version) {
-            setUpdateState('热更新已是最新（' + remote.version + '）');
+            setUpdateState('热更新已是最新（' + remote.version + '）· 源：' + hit.base);
             toast('热更新已是最新');
             return null;
           }
           setUpdateState('发现热更新 ' + remote.version + '，正在下载…');
-          var zipUrl = absolutizeOtaUrl(remote.url, base);
+          var zipUrl = absolutizeOtaUrl(remote.url, hit.base);
           return Updater.download({ version: remote.version, url: zipUrl }).then(function (info) {
             setUpdateState('下载完成，正在应用（App 会自动重启）…');
             return Updater.set(info);
@@ -169,6 +214,93 @@
       .catch(function (e) {
         setUpdateState('热更新失败：' + e.message);
       });
+  }
+
+  /* ===================== 更新弹窗（App 内更新） ===================== */
+  var pendingUpdate = null;
+  var lastAutoCheck = 0;
+
+  function hideUpdateModal() { $('updateModal').hidden = true; }
+  function setUpdHint(text) { $('updHint').textContent = text || ''; }
+
+  function setProgress(pct) {
+    $('updProgressWrap').hidden = false;
+    $('updProgressFill').style.width = Math.max(0, Math.min(100, pct)) + '%';
+    $('updProgressText').textContent = '已下载 ' + Math.round(pct) + '%';
+  }
+
+  function showUpdateModal(info) {
+    pendingUpdate = info;
+    $('updVersion').textContent = 'v' + info.latestVersion + (info.latestCode ? ' (' + info.latestCode + ')' : '');
+    var meta = [];
+    if (info.size) meta.push((info.size / 1048576).toFixed(2) + ' MB');
+    if (info.builtAt) meta.push(String(info.builtAt).replace('T', ' ').slice(0, 16));
+    $('updMeta').textContent = meta.join(' · ') + '　（当前 v' + LOCAL_VERSION.version + '）';
+
+    var notes = window.WB.update.notesOf(info.raw);
+    $('updNotes').innerHTML = notes.length
+      ? notes.map(function (s) { return '<div class="note">' + esc(s) + '</div>'; }).join('')
+      : '<div class="tip">本次更新没有写更新日志。</div>';
+
+    $('updProgressWrap').hidden = true;
+    $('updProgressFill').style.width = '0%';
+    setUpdHint(ApkInstaller
+      ? '点「立即更新」会在应用内下载安装包，然后打开系统安装界面（覆盖安装，数据保留）。'
+      : '当前不在 App 里，点「立即更新」会用浏览器打开下载页。');
+    $('updateModal').hidden = false;
+  }
+
+  // 应用内下载 + 拉起系统安装器；没有原生插件时退回浏览器下载页
+  function runInAppUpdate() {
+    var info = pendingUpdate;
+    if (!info) return;
+    if (!ApkInstaller) { openUpdatePage(info.pageUrl); return; }
+
+    setUpdHint('正在检查安装权限…');
+    Promise.resolve(ApkInstaller.canInstall()).then(function (r) {
+      if (r && r.allowed === false) {
+        setUpdHint('需要先允许「我的工作台」安装应用：已打开系统设置，打开开关后回来再点一次「立即更新」。');
+        return ApkInstaller.openInstallSettings().then(function () {
+          throw new Error('__need_permission__');
+        });
+      }
+    }).then(function () {
+      setUpdHint('正在下载安装包…');
+      setProgress(0);
+      return ApkInstaller.download({
+        url: info.apkUrl,
+        fileName: 'workbench-' + info.latestVersion + '.apk'
+      });
+    }).then(function (res) {
+      setUpdHint('下载完成，正在打开系统安装界面…');
+      return ApkInstaller.install({ path: res && res.path });
+    }).then(function (r2) {
+      if (r2 && r2.needPermission) {
+        setUpdHint('还需要允许安装未知应用：点「立即更新」重试。');
+        return;
+      }
+      $('updProgressWrap').hidden = true;
+      setUpdHint('已打开系统安装界面，点「安装」即可完成（覆盖安装，数据保留）。');
+    }).catch(function (e) {
+      if (e && e.message === '__need_permission__') return;
+      setUpdHint('更新失败：' + ((e && e.message) ? e.message : e));
+    });
+  }
+
+  // 静默检查（启动时 + 回到前台；最多每 6 小时一次），有新版就弹窗
+  function checkUpdateAuto(force) {
+    var now = Date.now();
+    if (!force && now - lastAutoCheck < 6 * 3600 * 1000) return;
+    lastAutoCheck = now;
+    var bases = window.WB.update.parseBases(S.getSettings().updateBase);
+    if (!bases.length) return;
+    fetchFirstJson(bases, '/update/version.json', 6000).then(function (hit) {
+      var res = window.WB.update.evaluate(LOCAL_VERSION, hit.json, hit.base);
+      res.raw = hit.json;
+      if (!res.hasUpdate) return;
+      if (S.getSettings().ignoredVersion === res.latestVersion) return;
+      showUpdateModal(res);
+    }).catch(function () { /* 静默失败，不打扰 */ });
   }
 
   // APK 内：把带提醒的任务写进系统定时通知（关掉 App 也能收到）
@@ -729,6 +861,28 @@
     });
     $('checkUpdateBtn').addEventListener('click', checkApkUpdate);
     $('checkOtaBtn').addEventListener('click', checkOtaUpdate);
+
+    // 更新弹窗
+    $('updInstall').addEventListener('click', runInAppUpdate);
+    $('updClose').addEventListener('click', hideUpdateModal);
+    $('updLater').addEventListener('click', hideUpdateModal);
+    $('updIgnore').addEventListener('click', function () {
+      if (pendingUpdate) {
+        S.saveSettings({ ignoredVersion: pendingUpdate.latestVersion });
+        toast('已忽略 v' + pendingUpdate.latestVersion);
+      }
+      hideUpdateModal();
+    });
+    $('updateModal').addEventListener('click', function (e) {
+      if (e.target === $('updateModal')) hideUpdateModal();
+    });
+    if (ApkInstaller && ApkInstaller.addListener) {
+      try {
+        ApkInstaller.addListener('progress', function (d) {
+          if (d && typeof d.progress === 'number') setProgress(d.progress);
+        });
+      } catch (e) { /* 拿不到进度也不影响更新 */ }
+    }
     $('confirmDoneSwitch').addEventListener('change', function (e) {
       var on = !!e.target.checked;
       S.saveSettings({ confirmDone: on });
@@ -810,9 +964,10 @@
     checkReminders();
     setInterval(checkReminders, 60 * 1000);
     syncNativeNotifications();
+    checkUpdateAuto();   // 启动时静默检查更新，有新版就弹窗
 
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden) { checkReminders(); renderAll(); }
+      if (!document.hidden) { checkReminders(); renderAll(); checkUpdateAuto(); }
     });
   }
 

@@ -152,13 +152,31 @@ if (!dexEntries.length) {
   const wanted = [
     ['LocalNotifications（定时通知）', 'com/capacitorjs/plugins/localnotifications/LocalNotificationsPlugin'],
     ['CapacitorUpdater（热更新）', 'ee/forgr/capacitor_updater/CapacitorUpdaterPlugin'],
-    ['Browser（打开下载页）', 'com/capacitorjs/plugins/browser/BrowserPlugin']
+    ['Browser（打开下载页）', 'com/capacitorjs/plugins/browser/BrowserPlugin'],
+    ['ApkInstaller（应用内更新）', 'com/workbench/apkinstaller/ApkInstallerPlugin']
   ];
   wanted.forEach(([label, needle]) => {
     if (dexBlob.indexOf(needle) >= 0) ok('dex 里包含 ' + label + ' 的插件类');
     else err('dex 里找不到 ' + label + ' 的插件类（' + needle + '）');
   });
   console.log('  （dex：' + dexEntries.map((e) => e.name + ' ' + (e.rawSize / 1024).toFixed(0) + 'KB').join('，') + '）');
+}
+
+/* ---------- 自更新权限与 FileProvider（AndroidManifest 是二进制 XML，按两种编码找字符串） ---------- */
+const manifestEntry = byName.get('AndroidManifest.xml');
+if (manifestEntry) {
+  const man = extract(buf, manifestEntry);
+  const hasIn = (s) => man.indexOf(Buffer.from(s, 'utf8')) >= 0 || man.indexOf(Buffer.from(s, 'utf16le')) >= 0;
+  if (hasIn('android.permission.REQUEST_INSTALL_PACKAGES')) {
+    ok('清单里有 REQUEST_INSTALL_PACKAGES（允许 App 内发起安装）');
+  } else {
+    err('清单里缺少 REQUEST_INSTALL_PACKAGES，应用内更新无法拉起安装器');
+  }
+  if (hasIn('apkinstaller')) {
+    ok('清单里注册了 FileProvider（authority 以 .apkinstaller 结尾）');
+  } else {
+    err('清单里找不到 apkinstaller 的 FileProvider');
+  }
 }
 
 console.log('\n' + (fail ? '共 ' + fail + ' 个问题' : 'APK 自检通过 ✓'));

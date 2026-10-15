@@ -540,6 +540,32 @@ function makeCases(mode) {
     eq(r.pageUrl, '');
   };
 
+  cases['update: parseBases 多地址解析'] = (WB) => {
+    const p = WB.update.parseBases;
+    eq(p(''), []);
+    eq(p('  \n \n'), []);
+    eq(p('http://a.com/'), ['http://a.com']);
+    eq(p('http://a.com\nhttps://b.com/x//'), ['http://a.com', 'https://b.com/x']);
+    // 去重 + 保持顺序 + 容忍多余空白与空行
+    eq(p(' http://a.com \n\nhttp://a.com\n  http://c.com  '), ['http://a.com', 'http://c.com']);
+  };
+
+  cases['update: 默认更新地址已内置'] = (WB) => {
+    const d = WB.store.getSettings().updateBase;
+    ok(/^https?:\/\//.test(d), '默认更新地址应是 http(s) 地址，实际：' + d);
+    eq(WB.update.parseBases(d).length, 1);
+    eq(WB.DEFAULT_UPDATE_BASE, d);
+  };
+
+  cases['update: notesOf 更新日志规范化'] = (WB) => {
+    const n = WB.update.notesOf;
+    eq(n(null), []);
+    eq(n({}), []);
+    eq(n({ notes: [] }), []);
+    eq(n({ notes: ['换了新界面', ' 修复了提醒 ', ''] }), ['换了新界面', '修复了提醒']);
+    eq(n({ notes: '- 修好了 A\n* 加了 B\n\n普通一行' }), ['修好了 A', '加了 B', '普通一行']);
+  };
+
   return cases;
 }
 

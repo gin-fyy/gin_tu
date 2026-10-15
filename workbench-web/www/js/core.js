@@ -17,7 +17,10 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.1.1';
+  var APP_VERSION = '1.1.3';
+  // 默认更新地址：打包时内置，装完即可直接「检查更新」。
+  // 可在「我的 → 更新地址」改成任意能提供 update/ 与 ota/ 目录的地址（支持多行，从上往下试）。
+  var DEFAULT_UPDATE_BASE = 'https://cdn.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs';
 
   var KEY_TASKS = 'wb_tasks';
   var KEY_CATEGORIES = 'wb_categories';
@@ -333,7 +336,7 @@
 
   function getSettings() {
     return Object.assign(
-      { nickname: '打工人', notify: true, updateBase: '', confirmDone: true },
+      { nickname: '打工人', notify: true, updateBase: DEFAULT_UPDATE_BASE, confirmDone: true },
       read(KEY_SETTINGS, {})
     );
   }
@@ -642,9 +645,33 @@
     };
   }
 
+  // 把「更新地址」文本框解析成地址列表：一行一个，忽略空行、去掉结尾斜杠、去重、保持顺序
+  function parseBases(text) {
+    var out = [];
+    String(text || '').split(/\r?\n/).forEach(function (line) {
+      var u = line.trim().replace(/\/+$/, '');
+      if (u && out.indexOf(u) < 0) out.push(u);
+    });
+    return out;
+  }
+
+  // 规范化「更新日志」：支持数组，或字符串（按行拆、去掉 - / * 前缀）
+  function notesOf(remote) {
+    var raw = remote && remote.notes;
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return raw.map(function (s) { return String(s).trim(); }).filter(Boolean);
+    }
+    return String(raw)
+      .split(/\r?\n/)
+      .map(function (s) { return s.replace(/^\s*[-*•]\s*/, '').trim(); })
+      .filter(Boolean);
+  }
+
   return {
     APP_TAG: APP_TAG,
     APP_VERSION: APP_VERSION,
+    DEFAULT_UPDATE_BASE: DEFAULT_UPDATE_BASE,
     DATA_VERSION: DATA_VERSION,
     storage: storage,
     datetime: datetime,
@@ -654,7 +681,9 @@
     reminder: reminder,
     update: {
       compareVersions: compareVersions,
-      evaluate: evaluateUpdate
+      evaluate: evaluateUpdate,
+      parseBases: parseBases,
+      notesOf: notesOf
     }
   };
 });

@@ -39,7 +39,7 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function test(name, fn) {
+async function test(name, fn, pre) {
   let dom = null;
   try {
     dom = new JSDOM(htmlSrc, {
@@ -53,6 +53,7 @@ async function test(name, fn) {
     window.alert = () => {};
     if (!window.URL.createObjectURL) window.URL.createObjectURL = () => 'blob:stub';
     if (!window.URL.revokeObjectURL) window.URL.revokeObjectURL = () => {};
+    if (pre) pre(window); // 需要在 app.js 求值前注入的东西（例如假装运行在 App 里）
 
     window.eval(coreSrc);
     window.eval(appSrc);
@@ -261,58 +262,150 @@ function addQuick(w, title) {
     if ($(w, '#mineAvatar').textContent !== '小') throw new Error('头像首字不对');
   });
 
-  await test('更新：当前版本 / 保存更新地址 / 检查更新', async (w) => {
+  await test('更新：默认地址 / 多源容灾 / 检查更新', async (w) => {
     click(w, $(w, '.tab[data-view="mine"]'));
     if ($(w, '#versionLine').textContent.indexOf(w.WB.APP_VERSION) < 0) {
       throw new Error('未显示当前版本：' + $(w, '#versionLine').textContent);
     }
-
-    // 没填地址 → 明确提示
-    click(w, $(w, '#checkUpdateBtn'));
-    if ($(w, '#updateState').textContent.indexOf('更新地址') < 0) throw new Error('未提示填写更新地址');
-
-    // 保存地址（末尾斜杠应被去掉）
-    type(w, $(w, '#updateBaseInput'), 'http://127.0.0.1:5173/');
-    click(w, $(w, '#updateBaseSave'));
-    if (w.WB.store.getSettings().updateBase !== 'http://127.0.0.1:5173') {
-      throw new Error('更新地址未保存：' + w.WB.store.getSettings().updateBase);
+    // 内置默认更新地址：装完就能直接点，不用手填
+    if ($(w, '#updateBaseInput').value.indexOf('cdn.jsdelivr.net') < 0) {
+      throw new Error('未预填默认更新地址：' + $(w, '#updateBaseInput').value);
     }
 
-    // 假 fetch：远端同版本 → 已是最新
-    let askedUrl = '';
+    // 保存多行地址（一行一个；整串结尾斜杠会被去掉）
+    type(w, $(w, '#updateBaseInput'), 'http://127.0.0.1:5173/\nhttps://cdn.example.com/base/');
+    click(w, $(w, '#updateBaseSave'));
+    const saved = w.WB.store.getSettings().updateBase;
+    if (saved.indexOf('http://127.0.0.1:5173') < 0 || saved.indexOf('https://cdn.example.com/base') < 0) {
+      throw new Error('多行更新地址未保存：' + saved);
+    }
+    const bases = w.WB.update.parseBases(saved);
+    if (bases.length !== 2 || bases[0] !== 'http://127.0.0.1:5173' || bases[1] !== 'https://cdn.example.com/base') {
+      throw new Error('地址解析不对：' + JSON.stringify(bases));
+    }
+
+    // 第一个源失败 → 自动落到第二个源，并在状态里标出实际使用的源
+    const asked = [];
     w.fetch = (url) => {
-      askedUrl = String(url);
+      asked.push(String(url));
+      if (String(url).indexOf('127.0.0.1') >= 0) return Promise.resolve({ ok: false, status: 500 });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ version: w.WB.APP_VERSION, versionCode: 1 }) });
+    };
+    click(w, $(w, '#checkUpdateBtn'));
+    await sleep(80);
+    if (asked.length < 2) throw new Error('没有尝试第二个源：' + JSON.stringify(asked));
+    if ($(w, '#updateState').textContent.indexOf('cdn.example.com') < 0) {
+      throw new Error('未标出实际使用的源：' + $(w, '#updateState').textContent);
+    }
+    if ($(w, '#updateState').textContent.indexOf('最新') < 0) {
+      throw new Error('应提示已是最新：' + $(w, '#updateState').textContent);
+    }
+
+    // 发现新版本 → 弹更新弹窗（含更新日志），而不是直接开浏览器
+    w.fetch = (url) => {
+      if (String(url).indexOf('127.0.0.1') >= 0) return Promise.resolve({ ok: false, status: 500 });
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ version: w.WB.APP_VERSION, versionCode: 1, apk: 'workbench-debug.apk' })
+        json: () => Promise.resolve({
+          version: '9.9.9',
+          versionCode: 99,
+          apk: 'workbench-debug.apk',
+          size: 5901145,
+          builtAt: '2026-10-15T13:54:56.142Z',
+          notes: ['换了新界面', '修复了提醒没响的问题']
+        })
       });
     };
     click(w, $(w, '#checkUpdateBtn'));
-    await sleep(40);
-    if (askedUrl.indexOf('http://127.0.0.1:5173/update/version.json') !== 0) throw new Error('请求地址不对：' + askedUrl);
-    if ($(w, '#updateState').textContent.indexOf('最新') < 0) {
-      throw new Error('未提示已是最新：' + $(w, '#updateState').textContent);
-    }
+    await sleep(80);
+    if ($(w, '#updateModal').hidden) throw new Error('未弹出更新弹窗');
+    if ($(w, '#updVersion').textContent.indexOf('9.9.9') < 0) throw new Error('弹窗里的版本号不对：' + $(w, '#updVersion').textContent);
+    if ($(w, '#updNotes').textContent.indexOf('换了新界面') < 0) throw new Error('更新日志第一条没显示');
+    if ($(w, '#updNotes').textContent.indexOf('修复了提醒没响的问题') < 0) throw new Error('更新日志不完整');
+    if ($(w, '#updMeta').textContent.indexOf('MB') < 0) throw new Error('没显示安装包大小');
+    click(w, $(w, '#updLater'));
+    if (!$(w, '#updateModal').hidden) throw new Error('「稍后」没有关掉弹窗');
 
-    // 假 fetch：远端更高 versionCode → 提示发现新版，并打开下载页
-    let opened = '';
-    w.open = (u) => { opened = u; return null; };
-    w.fetch = () => Promise.resolve({
-      ok: true,
-      json: () => Promise.resolve({ version: '9.9.9', versionCode: 99, apk: 'workbench-debug.apk' })
-    });
+    // 所有源都连不上 → 明确报错
+    w.fetch = () => Promise.reject(new Error('network down'));
     click(w, $(w, '#checkUpdateBtn'));
-    await sleep(40);
-    if ($(w, '#updateState').textContent.indexOf('9.9.9') < 0) {
-      throw new Error('未提示发现新版本：' + $(w, '#updateState').textContent);
+    await sleep(80);
+    if ($(w, '#updateState').textContent.indexOf('检查失败') < 0) {
+      throw new Error('未提示失败：' + $(w, '#updateState').textContent);
     }
-    if (opened.indexOf('http://127.0.0.1:5173/update/') !== 0) throw new Error('未打开下载页：' + opened);
 
-    // 热更新：网页版没有原生插件 → 明确说明只在 App 内可用
+    // 热更新：网页版没有原生插件 → 说明只在 App 内可用
     click(w, $(w, '#checkOtaBtn'));
     if ($(w, '#updateState').textContent.indexOf('APK') < 0) {
       throw new Error('未说明热更新仅在 App 内可用：' + $(w, '#updateState').textContent);
     }
+  });
+
+  await test('更新弹窗：App 内下载安装（含进度与忽略）', async (w) => {
+    const calls = w.__calls;
+    w.fetch = () => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        version: '9.9.9', versionCode: 99, apk: 'workbench-debug.apk', size: 5901145,
+        notes: ['应用内更新']
+      })
+    });
+    // 手动触发一次检查，弹出弹窗
+    click(w, $(w, '.tab[data-view="mine"]'));
+    click(w, $(w, '#checkUpdateBtn'));
+    await sleep(60);
+    if ($(w, '#updateModal').hidden) throw new Error('未弹出更新弹窗');
+
+    // 点「立即更新」→ 依次调用 canInstall / download / install
+    click(w, $(w, '#updInstall'));
+    await sleep(60);
+    if (calls[0] !== 'canInstall') throw new Error('没有先检查安装权限：' + JSON.stringify(calls));
+    if (!calls.some((c) => c.indexOf('download:') === 0)) throw new Error('没有在应用内下载：' + JSON.stringify(calls));
+    if (!calls.some((c) => c.indexOf('download:') === 0 && c.indexOf('workbench-debug.apk') > 0)) {
+      throw new Error('下载地址不对：' + JSON.stringify(calls));
+    }
+    if (!calls.some((c) => c.indexOf('install:') === 0)) throw new Error('没有拉起安装：' + JSON.stringify(calls));
+    if ($(w, '#updHint').textContent.indexOf('安装') < 0) throw new Error('没有提示接下来要做什么：' + $(w, '#updHint').textContent);
+
+    // 原生进度事件 → 进度条
+    if (w.__progressCb) {
+      w.__progressCb({ progress: 42, received: 42, total: 100 });
+      if ($(w, '#updProgressFill').style.width.indexOf('42') !== 0) {
+        throw new Error('进度条没更新：' + $(w, '#updProgressFill').style.width);
+      }
+    }
+
+    // 「忽略此版本」→ 记进设置，下次不再打扰
+    click(w, $(w, '#updIgnore'));
+    if (w.WB.store.getSettings().ignoredVersion !== '9.9.9') {
+      throw new Error('忽略的版本没记下来：' + w.WB.store.getSettings().ignoredVersion);
+    }
+    if (!$(w, '#updateModal').hidden) throw new Error('忽略后弹窗没关');
+
+    // 需要授权的情况：canInstall 返回 false → 打开系统设置并提示
+    w.Capacitor.Plugins.ApkInstaller.canInstall = () => { calls.push('canInstall:denied'); return Promise.resolve({ allowed: false, sdk: 34 }); };
+    click(w, $(w, '#checkUpdateBtn'));
+    await sleep(60);
+    click(w, $(w, '#updInstall'));
+    await sleep(60);
+    if (!calls.includes('canInstall:denied')) throw new Error('没有重新检查权限');
+    if (!calls.includes('openInstallSettings')) throw new Error('没有打开系统授权页');
+    if ($(w, '#updHint').textContent.indexOf('允许') < 0) throw new Error('没有提示需要授权：' + $(w, '#updHint').textContent);
+  }, (w) => {
+    // 在 app.js 求值前假装运行在 App 里，注入原生插件（calls 与测试体共享）
+    const calls = [];
+    w.__calls = calls;
+    w.Capacitor = {
+      Plugins: {
+        ApkInstaller: {
+          canInstall: () => { calls.push('canInstall'); return Promise.resolve({ allowed: true, sdk: 34 }); },
+          openInstallSettings: () => { calls.push('openInstallSettings'); return Promise.resolve(); },
+          download: (o) => { calls.push('download:' + o.url); return Promise.resolve({ path: '/tmp/workbench-9.9.9.apk', size: 5901145 }); },
+          install: (o) => { calls.push('install:' + o.path); return Promise.resolve({ started: true }); },
+          addListener: (ev, cb) => { w.__progressCb = cb; return { remove: () => {} }; }
+        }
+      }
+    };
   });
 
   await test('数据：导出不报错、导入覆盖生效', (w) => {

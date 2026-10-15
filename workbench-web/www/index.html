@@ -122,9 +122,9 @@
           <span>当前版本</span>
           <span class="tip" id="versionLine">—</span>
         </div>
-        <div class="tip" style="margin-top:8px">更新地址：电脑上跑 <b>node _tools/serve.js</b> 时会打印一个局域网地址，填到下面就能检查更新（手机需与电脑同一个 Wi-Fi）。</div>
-        <div class="row" style="margin-top:10px">
-          <input id="updateBaseInput" class="cat-input" placeholder="http://192.168.x.x:5173" />
+        <div class="tip" style="margin-top:8px">更新地址：<b>可填多个，一行一个，App 从上往下试</b>。默认已内置 CDN 地址；也可以加上电脑上 <b>node _tools/serve.js</b> 打印的局域网地址（手机需与电脑同一 Wi-Fi）。</div>
+        <div class="row" style="margin-top:10px; align-items:flex-start">
+          <textarea id="updateBaseInput" class="cat-input" rows="2" placeholder="https://cdn.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs&#10;http://192.168.1.5:5173"></textarea>
           <button class="mini-btn" id="updateBaseSave">保存</button>
         </div>
         <div class="row" style="margin-top:12px">
@@ -259,6 +259,35 @@
     </div>
     <div class="sheet-foot">
       <button class="btn-primary" id="importDo">确认导入（覆盖当前数据）</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 更新弹窗 ===================== -->
+<div class="modal-mask" id="updateModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <span id="updTitle">发现新版本</span>
+      <button class="sheet-close" id="updClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="upd-ver">
+        <b id="updVersion">—</b>
+        <span class="tip" id="updMeta"></span>
+      </div>
+      <div class="upd-notes" id="updNotes"></div>
+      <div class="upd-progress" id="updProgressWrap" hidden>
+        <div class="upd-progress-bar"><div class="upd-progress-fill" id="updProgressFill"></div></div>
+        <div class="tip" id="updProgressText">准备下载…</div>
+      </div>
+      <div class="tip" id="updHint"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-primary" id="updInstall">立即更新</button>
+      <div class="row" style="margin-top:10px">
+        <button class="mini-btn ghost" id="updLater">稍后</button>
+        <button class="mini-btn ghost" id="updIgnore">忽略此版本</button>
+      </div>
     </div>
   </div>
 </div>

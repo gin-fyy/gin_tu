@@ -1,0 +1,18 @@
+{
+  "name": "apk-installer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地 Capacitor 插件：在应用内下载 APK 并拉起系统安装器（自更新用）",
+  "files": [
+    "android/",
+    "README.md"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  }
+}

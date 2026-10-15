@@ -352,6 +352,58 @@ main { padding: 0 16px; }
 .switch { width: 46px; height: 26px; flex-shrink: 0; }
 select { width: auto; }
 
+/* ===== 更新弹窗 ===== */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(20, 24, 33, 0.46);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.modal {
+  width: 100%;
+  max-width: 460px;
+  max-height: 84vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px 18px 18px;
+  animation: modal-pop 0.16s ease-out;
+}
+@keyframes modal-pop { from { transform: translateY(10px) scale(0.98); opacity: 0.7; } to { transform: none; opacity: 1; } }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.modal-head span { font-size: 17px; font-weight: 700; }
+.modal-body { display: flex; flex-direction: column; gap: 12px; }
+.modal-foot { margin-top: 16px; }
+.upd-ver { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.upd-ver b { font-size: 20px; }
+.upd-notes {
+  background: #F7F8FC;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  color: #3A4150;
+  line-height: 1.75;
+}
+.upd-notes .note::before { content: '· '; color: var(--primary); font-weight: 700; }
+.upd-progress-bar {
+  height: 8px;
+  background: #EEF1F6;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.upd-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.18s ease-out;
+}
+
 /* ===== toast ===== */
 .toast {
   position: fixed;

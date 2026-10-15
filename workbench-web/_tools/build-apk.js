@@ -142,6 +142,35 @@ function bumpVersion() {
   return { versionName: versionName, versionCode: code };
 }
 
+/* ---------- 从 CHANGELOG.md 取对应版本的更新日志（写进 version.json，App 弹窗显示） ---------- */
+function changelogNotes(version) {
+  const file = path.join(ROOT, 'CHANGELOG.md');
+  if (!fs.existsSync(file)) {
+    console.log('! 没有 CHANGELOG.md，更新弹窗将不显示更新日志');
+    return [];
+  }
+  const sections = {};
+  let current = null;
+  fs.readFileSync(file, 'utf8').split(/\r?\n/).forEach((line) => {
+    const h = line.match(/^##\s+(.+?)\s*$/);
+    if (h) {
+      current = h[1].trim();
+      sections[current] = [];
+      return;
+    }
+    if (current && /^\s*[-*]\s+/.test(line)) {
+      sections[current].push(line.replace(/^\s*[-*]\s+/, '').trim());
+    }
+  });
+  const keys = Object.keys(sections);
+  if (sections[version]) return sections[version];
+  if (keys.length) {
+    console.log('   CHANGELOG 里没有 ' + version + ' 这一段，改用最新一段（' + keys[0] + '）');
+    return sections[keys[0]];
+  }
+  return [];
+}
+
 /* ================= 主流程 ================= */
 (async function main() {
   /* 前置检查 */
@@ -219,13 +248,15 @@ function bumpVersion() {
 
   /* 生成 dist/version.json：App 内「检查更新」和 /update/ 下载页都读它 */
   const buf = fs.readFileSync(out);
+  const notes = changelogNotes(ver.versionName);
   const meta = {
     version: ver.versionName,
     versionCode: ver.versionCode,
     apk: path.basename(out),
     size: buf.length,
     sha256: require('crypto').createHash('sha256').update(buf).digest('hex'),
-    builtAt: new Date().toISOString()
+    builtAt: new Date().toISOString(),
+    notes: notes
   };
   fs.writeFileSync(path.join(DIST, 'version.json'), JSON.stringify(meta, null, 2), 'utf8');
   // 同时写进 www/：App 启动时读它，就知道自己是哪个版本（热更新 bundle 里不含它）
@@ -235,6 +266,7 @@ function bumpVersion() {
     builtAt: meta.builtAt
   }, null, 2), 'utf8');
   console.log('   版本信息：www/version.json + dist/version.json  (' + meta.version + ' / code ' + meta.versionCode + ')');
+  console.log('   更新日志：' + (notes.length ? notes.length + ' 条（来自 CHANGELOG.md）' : '（无）'));
 
   console.log('\n✅ 打包完成：' + out + '  (' + size + ' MB)');
   console.log('   装到手机：adb install -r "' + out + '"，或把文件传进手机点击安装（需允许“安装未知来源应用”）。');
