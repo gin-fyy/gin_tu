@@ -2,10 +2,11 @@
 
 自己用的任务管理，两套实现、同一套逻辑（任务 / 分类 / 重复 / 搜索 / 统计 / 到期提醒），**数据全部存本机，无后端、不联网**。
 
-> **这个仓库同时是手机更新源**：`docs/` 是 GitHub Pages 发布目录（落地页 + 网页版 + APK + 更新文件）。
-> 开启 Pages 后（仓库 `Settings → Pages → Source: Deploy from a branch → 分支 main / 目录 /docs`）：
-> - 手机上打开 `https://gin-fyy.github.io/gin_tu/` → 直接下载安装 APK，或直接用网页版
-> - App 的「我的 → 更新地址」填 `https://gin-fyy.github.io/gin_tu`（不带结尾斜杠）→ 以后**不插电脑也能检查更新与热更新**
+> **这个仓库同时是手机更新源**：`docs/` 是发布目录（落地页 + 网页版 + APK + 更新文件）。两种用法二选一：
+> - **方式 A（最省事，已实测可用）**：App 的「我的 → 更新地址」填
+>   `https://cdn.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs` —— 不用改任何 GitHub 设置；发新版本后跑 `npm.cmd run purge` 刷新 CDN 缓存。
+> - **方式 B**：仓库 `Settings → Pages → Deploy from a branch → main / docs`（新版界面**没有 Save**，选完即生效），
+>   之后手机浏览器打开 `https://gin-fyy.github.io/gin_tu/` 可直接下载安装，更新地址填 `https://gin-fyy.github.io/gin_tu`。
 >
 > 发布目录由 `npm.cmd run pages -- --out ..\docs` 生成；APK 与热更新包分别来自 `npm.cmd run apk` / `npm.cmd run ota`。
 

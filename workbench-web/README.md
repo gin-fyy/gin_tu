@@ -188,7 +188,9 @@ App 里点「检查热更新」→ 读 `/ota/latest.json` → 用 `@capgo/capaci
 - [ ] 关掉 App 后到点能收到系统通知
 - [ ] `npm.cmd run ota` 后，「检查热更新」能下载并自动重启到新版本
 
-## 十、把更新源放到 GitHub Pages（不插电脑也能更新）
+## 十、把更新源放到 GitHub（不插电脑也能更新）
+
+先把发布目录生成好并推上去：
 
 ```powershell
 cd workbench-web
@@ -199,19 +201,37 @@ cd ..
 git add -A; git commit -m "update"; git push
 ```
 
-然后在仓库 `Settings → Pages → Source: Deploy from a branch → 分支 main / 目录 /docs`，等一两分钟，得到：
+然后**二选一**对外提供（App 的「更新地址」填对应的 base，末尾不要斜杠）：
+
+### 方式 A：jsDelivr CDN（最省事，不用改任何 GitHub 设置）✅ 实测可用
+
+App「更新地址」填：
+
+```
+https://cdn.jsdelivr.net/gh/<用户名>/<仓库名>@main/docs
+```
+
+| App 会请求的地址 | 内容 |
+|---|---|
+| `.../update/version.json` | 版本信息（「检查更新」读它） |
+| `.../update/workbench-debug.apk` | 安装包 |
+| `.../ota/latest.json` + `.../ota/www-*.zip` | 热更新（「检查热更新」读它） |
+
+- **发新版本后跑一次 `npm.cmd run purge`**：jsDelivr 对 `@main` 有缓存，刷新后手机才能马上看到新版本。
+- 实测（本机网络）：小文件秒开；5.6MB 的 APK 第一次要等 jsDelivr 回源（约 70–90 KB/s），之后走缓存会快。
+
+### 方式 B：GitHub Pages（有落地页，手机浏览器可直接打开下载）
+
+仓库 `Settings → Pages → Source: Deploy from a branch → 分支 main / 目录 /docs`（新版界面**没有 Save 按钮**，选完即生效），等一两分钟：
 
 | 地址 | 内容 |
 |---|---|
 | `https://<用户名>.github.io/<仓库名>/` | 落地页（下载 APK / 打开网页版） |
-| `.../update/version.json`、`.../update/workbench-debug.apk` | App 的「检查更新」读这个 |
-| `.../ota/latest.json`、`.../ota/www-*.zip` | App 的「检查热更新」读这个 |
-
-App 的「更新地址」填 `https://<用户名>.github.io/<仓库名>`（**不带**结尾斜杠），之后：
-- 「检查更新」→ 提示新版 → 浏览器下载 APK → 覆盖安装（数据保留）
-- 「检查热更新」→ 下载并切换网页层，不用重装 APK
+| `.../update/version.json`、`.../update/workbench-debug.apk` | 「检查更新」 |
+| `.../ota/latest.json`、`.../ota/www-*.zip` | 「检查热更新」 |
 
 > `docs/` 是生成物，每次发版重新生成再提交；`workbench-web/dist/` 与它内容重复，已 gitignore（只让 `docs/` 入库）。
+> 提醒：`github.io`、`raw.githubusercontent.com` 在国内手机上经常连不上；连不上就用方式 A 或局域网更新。
 
 ## 十一、版本
 
