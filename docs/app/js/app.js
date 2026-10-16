@@ -135,8 +135,7 @@
     });
   }
 
-  // 依次尝试多个更新地址，返回第一个可用的：{ base, json }
-  // 全部失败时抛出带原因的 Error（不写 console，方便界面直接展示）
+  // 依次尝试多个更新地址，返回第一个可用的：{ base, json }（热更新用：latest.json 不适合比"谁最新"）
   function fetchFirstJson(bases, pathSuffix, timeoutMs) {
     var i = 0;
     var failed = [];
@@ -156,7 +155,25 @@
     return tryNext();
   }
 
-  /* APK 自更新：读远端 version.json → 比较 → 打开下载页（系统安装器会再确认一次） */
+  // 同时问所有更新地址，取「版本最新」的那个：{ base, remote, sources }
+  // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同则用列表里靠前的（通常最快）
+  function fetchNewest(bases, pathSuffix, timeoutMs) {
+    if (!bases.length) return Promise.reject(new Error('没有配置更新地址'));
+    var tasks = bases.map(function (base) {
+      return fetchJson(base + pathSuffix, timeoutMs).then(function (json) {
+        return { base: base, remote: json };
+      }).catch(function () { return null; });
+    });
+    return Promise.all(tasks).then(function (list) {
+      var alive = list.filter(Boolean);
+      if (!alive.length) throw new Error('所有更新地址都连不上');
+      var best = window.WB.update.pickNewest(alive);
+      best.sources = alive.length;
+      return best;
+    });
+  }
+
+  /* APK 自更新：读各源的 version.json → 取最新 → 弹更新弹窗 → 应用内下载安装 */
   function checkApkUpdate() {
     var bases = window.WB.update.parseBases(S.getSettings().updateBase);
     if (!bases.length) {
@@ -164,20 +181,21 @@
       return;
     }
     setUpdateState('正在检查（' + bases.length + ' 个地址）…');
-    fetchFirstJson(bases, '/update/version.json')
+    fetchNewest(bases, '/update/version.json')
       .then(function (hit) {
-        var res = window.WB.update.evaluate(LOCAL_VERSION, hit.json, hit.base);
+        var res = window.WB.update.evaluate(LOCAL_VERSION, hit.remote, hit.base);
+        var from = hit.base.replace(/^https?:\/\//, '') + (hit.sources > 1 ? '（' + hit.sources + ' 个源中最新）' : '');
         if (!res.hasUpdate) {
-          setUpdateState('已是最新版本（' + LOCAL_VERSION.version + '）· 源：' + hit.base);
+          setUpdateState('已是最新版本（' + LOCAL_VERSION.version + '）· 源：' + from);
           toast('已是最新版本');
           return;
         }
-        setUpdateState('发现新版本 ' + res.latestVersion + '（当前 ' + LOCAL_VERSION.version + '）· 源：' + hit.base);
-        res.raw = hit.json;
+        setUpdateState('发现新版本 ' + res.latestVersion + '（当前 ' + LOCAL_VERSION.version + '）· 源：' + from);
+        res.raw = hit.remote;
         showUpdateModal(res);
       })
       .catch(function (e) {
-        setUpdateState('检查失败：' + e.message + '（可在「更新地址」里填多个来源，一行一个，会自动依次尝试）');
+        setUpdateState('检查失败：' + e.message + '（可在「更新地址」里填多个来源，一行一个）');
       });
   }
 
@@ -250,6 +268,35 @@
     $('updateModal').hidden = false;
   }
 
+  // 依次用多个源下载安装包（某个源慢/断就换下一个；已下载部分由原生端断点续传）
+  function downloadApkWithFallback(info, fileName) {
+    var bases = window.WB.update.parseBases(S.getSettings().updateBase);
+    var urls = [];
+    if (info.apkUrl) urls.push(info.apkUrl);   // 先用「报告了最新版本的那个源」
+    bases.forEach(function (b) {
+      var u = b.replace(/\/+$/, '') + '/update/' + (info.apkFileName || 'workbench-debug.apk');
+      if (urls.indexOf(u) < 0) urls.push(u);   // 再用其它源（同一个文件，内容一致）
+    });
+
+    var i = 0;
+    function tryNext() {
+      if (i >= urls.length) return Promise.reject(new Error('所有下载源都没成功，稍后重试'));
+      var url = urls[i++];
+      setUpdHint('正在下载安装包（第 ' + i + '/' + urls.length + ' 个源，支持断点续传）…');
+      setProgress(0);
+      return ApkInstaller.download({
+        url: url,
+        fileName: fileName,
+        sha256: info.sha256 || ''
+      }).catch(function (e) {
+        var msg = (e && e.message) ? e.message : String(e);
+        setUpdHint('这个源没成功（' + msg + '），换下一个…');
+        return tryNext();
+      });
+    }
+    return tryNext();
+  }
+
   // 应用内下载 + 拉起系统安装器；没有原生插件时退回浏览器下载页
   function runInAppUpdate() {
     var info = pendingUpdate;
@@ -265,14 +312,9 @@
         });
       }
     }).then(function () {
-      setUpdHint('正在下载安装包…');
-      setProgress(0);
-      return ApkInstaller.download({
-        url: info.apkUrl,
-        fileName: 'workbench-' + info.latestVersion + '.apk'
-      });
+      return downloadApkWithFallback(info, 'workbench-' + info.latestVersion + '.apk');
     }).then(function (res) {
-      setUpdHint('下载完成，正在打开系统安装界面…');
+      setUpdHint('下载完成' + (res && res.attempts > 1 ? '（重试 ' + res.attempts + ' 次）' : '') + '，正在打开系统安装界面…');
       return ApkInstaller.install({ path: res && res.path });
     }).then(function (r2) {
       if (r2 && r2.needPermission) {
@@ -294,9 +336,9 @@
     lastAutoCheck = now;
     var bases = window.WB.update.parseBases(S.getSettings().updateBase);
     if (!bases.length) return;
-    fetchFirstJson(bases, '/update/version.json', 6000).then(function (hit) {
-      var res = window.WB.update.evaluate(LOCAL_VERSION, hit.json, hit.base);
-      res.raw = hit.json;
+    fetchNewest(bases, '/update/version.json', 6000).then(function (hit) {
+      var res = window.WB.update.evaluate(LOCAL_VERSION, hit.remote, hit.base);
+      res.raw = hit.remote;
       if (!res.hasUpdate) return;
       if (S.getSettings().ignoredVersion === res.latestVersion) return;
       showUpdateModal(res);

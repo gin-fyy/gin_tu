@@ -521,10 +521,12 @@ function makeCases(mode) {
     eq(r.apkUrl, 'http://192.168.1.5:5173/update/workbench-debug.apk');
     eq(r.otaUrl, 'http://192.168.1.5:5173/ota/latest.json');
 
-    r = WB.update.evaluate(local, { version: '1.1.1', versionCode: 2 }, base);
+    r = WB.update.evaluate(local, { version: '1.1.1', versionCode: 2, apk: 'workbench-debug.apk', sha256: 'a'.repeat(64) }, base);
     eq(r.hasUpdate, true);
     eq(r.latestVersion, '1.1.1');
     eq(r.latestCode, 2);
+    eq(r.apkFileName, 'workbench-debug.apk');
+    eq(r.sha256, 'a'.repeat(64));
 
     // 远端只有版本号（没 versionCode）时按版本号比较
     r = WB.update.evaluate(local, { version: '1.2.0' }, base);
@@ -552,8 +554,10 @@ function makeCases(mode) {
 
   cases['update: 默认更新地址已内置'] = (WB) => {
     const d = WB.store.getSettings().updateBase;
-    ok(/^https?:\/\//.test(d), '默认更新地址应是 http(s) 地址，实际：' + d);
-    eq(WB.update.parseBases(d).length, 1);
+    const list = WB.update.parseBases(d);
+    ok(list.length >= 1, '默认更新地址至少要有 1 个，实际：' + JSON.stringify(list));
+    list.forEach((u) => ok(/^https?:\/\//.test(u), '默认地址应是 http(s)：' + u));
+    ok(list[0].indexOf('cdn.jsdelivr.net') >= 0, '第一行应是最快的 CDN 源：' + list[0]);
     eq(WB.DEFAULT_UPDATE_BASE, d);
   };
 
@@ -564,6 +568,24 @@ function makeCases(mode) {
     eq(n({ notes: [] }), []);
     eq(n({ notes: ['换了新界面', ' 修复了提醒 ', ''] }), ['换了新界面', '修复了提醒']);
     eq(n({ notes: '- 修好了 A\n* 加了 B\n\n普通一行' }), ['修好了 A', '加了 B', '普通一行']);
+  };
+
+  cases['update: pickNewest 多个源取最新'] = (WB) => {
+    const p = WB.update.pickNewest;
+    eq(p([]), null);
+    eq(p([null, undefined]), null);
+    const a = { base: 'a', remote: { version: '1.1.3', versionCode: 3 } };
+    const b = { base: 'b', remote: { version: '1.1.4', versionCode: 4 } };
+    const c = { base: 'c', remote: { version: '1.1.1', versionCode: 2 } };
+    eq(p([a, b, c]).base, 'b');
+    eq(p([c, b, a]).base, 'b');
+    eq(p([c, a]).base, 'a');
+    // 没有 versionCode 时退回比较版本号
+    const d = { base: 'd', remote: { version: '1.2.0' } };
+    const e = { base: 'e', remote: { version: '1.1.9' } };
+    eq(p([e, d]).base, 'd');
+    // 版本相同 → 保持传入顺序（快的源排在前面）
+    eq(p([a, { base: 'a2', remote: { version: '1.1.3', versionCode: 3 } }]).base, 'a');
   };
 
   return cases;

@@ -92,6 +92,23 @@ function addQuick(w, title) {
   click(w, $(w, '#quickAdd'));
 }
 
+/* 假装运行在 App 里：在 app.js 求值前注入原生 ApkInstaller 插件（调用记录放在 w.__calls） */
+function injectApkInstaller(w) {
+  const calls = [];
+  w.__calls = calls;
+  w.Capacitor = {
+    Plugins: {
+      ApkInstaller: {
+        canInstall: () => { calls.push('canInstall'); return Promise.resolve({ allowed: true, sdk: 34 }); },
+        openInstallSettings: () => { calls.push('openInstallSettings'); return Promise.resolve(); },
+        download: (o) => { calls.push('download:' + o.url); return Promise.resolve({ path: '/tmp/workbench-9.9.9.apk', size: 5901145 }); },
+        install: (o) => { calls.push('install:' + o.path); return Promise.resolve({ started: true }); },
+        addListener: (ev, cb) => { w.__progressCb = cb; return { remove: () => {} }; }
+      }
+    }
+  };
+}
+
 (async function main() {
   await test('启动：四个页签 + 首页空状态渲染', (w) => {
     if ($$(w, '.tab').length !== 4) throw new Error('页签数量应为 4');
@@ -339,7 +356,72 @@ function addQuick(w, title) {
     if ($(w, '#updateState').textContent.indexOf('APK') < 0) {
       throw new Error('未说明热更新仅在 App 内可用：' + $(w, '#updateState').textContent);
     }
+
+    // 关键：两个源都答得上，但靠前的源（更快）还缓存着旧版 → 必须取版本更新的那个
+    const both = [];
+    w.fetch = (url) => {
+      both.push(String(url));
+      if (String(url).indexOf('127.0.0.1') >= 0) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ version: '1.1.3', versionCode: 3 }) });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ version: '9.9.9', versionCode: 99, apk: 'workbench-debug.apk', notes: ['取最新源'] })
+      });
+    };
+    click(w, $(w, '#checkUpdateBtn'));
+    await sleep(80);
+    if (both.length < 2) throw new Error('没有同时询问所有源：' + JSON.stringify(both));
+    if ($(w, '#updateModal').hidden) throw new Error('应弹出更新弹窗');
+    if ($(w, '#updVersion').textContent.indexOf('9.9.9') < 0) {
+      throw new Error('没有采用版本更新的那个源：' + $(w, '#updVersion').textContent);
+    }
+    if ($(w, '#updateState').textContent.indexOf('个源中最新') < 0) {
+      throw new Error('没有标出「多个源中最新」：' + $(w, '#updateState').textContent);
+    }
+    click(w, $(w, '#updLater'));
   });
+
+  await test('更新下载：第一个源超时 → 自动换下一个源，并带 sha256 校验', async (w) => {
+    const calls = w.__calls;
+    let attempts = 0;
+    let lastOpts = null;
+
+    // 第一个下载源模拟「超时」，第二个成功（真实场景：jsDelivr 太慢 → 换国内镜像）
+    w.Capacitor.Plugins.ApkInstaller.download = (o) => {
+      lastOpts = o;
+      attempts++;
+      calls.push('download' + attempts + ':' + o.url);
+      if (attempts === 1) return Promise.reject(new Error('timeout'));
+      return Promise.resolve({ path: '/tmp/workbench-9.9.9.apk', size: 5901145, attempts: 1 });
+    };
+
+    w.fetch = () => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        version: '9.9.9', versionCode: 99, apk: 'workbench-debug.apk',
+        sha256: 'b'.repeat(64), notes: ['下载更稳了']
+      })
+    });
+
+    // 配两个源，确保失败后还有下一个可用
+    type(w, $(w, '#updateBaseInput'), 'https://cdn.example.com/base\nhttps://mirror.example.com/m');
+    click(w, $(w, '#updateBaseSave'));
+
+    click(w, $(w, '.tab[data-view="mine"]'));
+    click(w, $(w, '#checkUpdateBtn'));
+    await sleep(60);
+    if ($(w, '#updateModal').hidden) throw new Error('未弹出更新弹窗');
+
+    click(w, $(w, '#updInstall'));
+    await sleep(120);
+    if (attempts < 2) throw new Error('第一个源失败后没有换源重试：' + JSON.stringify(calls));
+    if (!calls.some((c) => c.indexOf('install:') === 0)) throw new Error('换源成功后没有拉起安装：' + JSON.stringify(calls));
+    if (!lastOpts || lastOpts.sha256 !== 'b'.repeat(64)) {
+      throw new Error('下载时没有把 sha256 交给原生端校验：' + JSON.stringify(lastOpts));
+    }
+    if ($(w, '#updHint').textContent.indexOf('安装') < 0) throw new Error('没有提示去系统安装界面');
+  }, injectApkInstaller);
 
   await test('更新弹窗：App 内下载安装（含进度与忽略）', async (w) => {
     const calls = w.__calls;
@@ -391,22 +473,7 @@ function addQuick(w, title) {
     if (!calls.includes('canInstall:denied')) throw new Error('没有重新检查权限');
     if (!calls.includes('openInstallSettings')) throw new Error('没有打开系统授权页');
     if ($(w, '#updHint').textContent.indexOf('允许') < 0) throw new Error('没有提示需要授权：' + $(w, '#updHint').textContent);
-  }, (w) => {
-    // 在 app.js 求值前假装运行在 App 里，注入原生插件（calls 与测试体共享）
-    const calls = [];
-    w.__calls = calls;
-    w.Capacitor = {
-      Plugins: {
-        ApkInstaller: {
-          canInstall: () => { calls.push('canInstall'); return Promise.resolve({ allowed: true, sdk: 34 }); },
-          openInstallSettings: () => { calls.push('openInstallSettings'); return Promise.resolve(); },
-          download: (o) => { calls.push('download:' + o.url); return Promise.resolve({ path: '/tmp/workbench-9.9.9.apk', size: 5901145 }); },
-          install: (o) => { calls.push('install:' + o.path); return Promise.resolve({ started: true }); },
-          addListener: (ev, cb) => { w.__progressCb = cb; return { remove: () => {} }; }
-        }
-      }
-    };
-  });
+  }, injectApkInstaller);
 
   await test('数据：导出不报错、导入覆盖生效', (w) => {
     addQuick(w, '原始任务');

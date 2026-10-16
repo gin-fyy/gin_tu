@@ -80,14 +80,19 @@ function get(url, opts, depth) {
     bad('安装包下载出错：' + e.message);
   }
 
-  /* 5) 线上声明的 sha256 与本地发布目录里的包一致 */
-  const local = path.join(__dirname, '..', 'docs', 'update', remote.apk || 'workbench-debug.apk');
-  if (fs.existsSync(local)) {
+  /* 5) 线上声明的 sha256 与本地发布目录里的包一致（发布目录可能在 workbench-web/docs，也可能在仓库根 docs） */
+  const apkName = remote.apk || 'workbench-debug.apk';
+  const candidates = [
+    path.join(__dirname, '..', 'docs', 'update', apkName),
+    path.join(__dirname, '..', '..', 'docs', 'update', apkName)
+  ];
+  const local = candidates.find((p) => fs.existsSync(p));
+  if (local) {
     const h = crypto.createHash('sha256').update(fs.readFileSync(local)).digest('hex');
     if (h === remote.sha256) ok('线上声明的 sha256 与本地发布包一致（' + h.slice(0, 16) + '…）');
     else bad('sha256 不一致：本地 ' + h.slice(0, 16) + '… ≠ 线上 ' + String(remote.sha256).slice(0, 16) + '…');
   } else {
-    console.log('! 本地没有 docs/update/' + (remote.apk || 'workbench-debug.apk') + '，跳过哈希比对');
+    console.log('! 本地没找到发布用的 ' + apkName + '，跳过哈希比对（先跑 npm.cmd run pages -- --out ..\\docs）');
   }
 
   console.log('\n' + (fail ? '共 ' + fail + ' 个问题' : '链路自检通过 ✓ —— 手机端弹窗与更新所需的数据都就绪'));

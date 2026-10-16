@@ -17,10 +17,18 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.1.4';
+  var APP_VERSION = '1.1.5';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
-  // 可在「我的 → 更新地址」改成任意能提供 update/ 与 ota/ 目录的地址（支持多行，从上往下试）。
-  var DEFAULT_UPDATE_BASE = 'https://cdn.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs';
+  // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
+  // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
+  // 后三个是国内可达的 GitHub 加速镜像（实测 3 秒内返回正确版本）。
+  var DEFAULT_UPDATE_BASE = [
+    'https://cdn.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs',
+    'https://ghfast.top/https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs',
+    'https://ghproxy.net/https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs',
+    'https://gh-proxy.com/https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs',
+    'https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs'
+  ].join('\n');
 
   var KEY_TASKS = 'wb_tasks';
   var KEY_CATEGORIES = 'wb_categories';
@@ -639,6 +647,8 @@
       notes: (remote && remote.notes) || '',
       builtAt: (remote && remote.builtAt) || '',
       size: (remote && remote.size) || 0,
+      sha256: (remote && remote.sha256) || '',
+      apkFileName: apkName,
       apkUrl: root ? root + '/update/' + apkName : '',
       pageUrl: root ? root + '/update/' : '',
       otaUrl: root ? root + '/ota/latest.json' : ''
@@ -668,6 +678,21 @@
       .filter(Boolean);
   }
 
+  // 从多个来源里挑出「版本最新」的那个（entries: [{base, remote}]）
+  // 版本号相同则按传入顺序取第一个 —— 调用方应把快的源排在前面
+  function pickNewest(entries) {
+    var best = null;
+    (entries || []).forEach(function (e) {
+      if (!e || !e.remote) return;
+      if (!best) { best = e; return; }
+      var c1 = Number(e.remote.versionCode) || 0;
+      var c2 = Number(best.remote.versionCode) || 0;
+      if (c1 > c2) best = e;
+      else if (c1 === c2 && compareVersions(e.remote.version, best.remote.version) > 0) best = e;
+    });
+    return best;
+  }
+
   return {
     APP_TAG: APP_TAG,
     APP_VERSION: APP_VERSION,
@@ -683,7 +708,8 @@
       compareVersions: compareVersions,
       evaluate: evaluateUpdate,
       parseBases: parseBases,
-      notesOf: notesOf
+      notesOf: notesOf,
+      pickNewest: pickNewest
     }
   };
 });
