@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.2.1';
+  var APP_VERSION = '1.2.2';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -37,6 +37,16 @@
   var KEY_COMPLETIONS = 'wb_completions';
   var KEY_SETTINGS = 'wb_settings';
   var KEY_NOTIFIED = 'wb_notified';
+  var KEY_WALLPAPER = 'wb_wallpaper_img';   // 自定义壁纸（压缩后的 dataURL，单独存避免撑大设置对象）
+
+  // 内置壁纸：image 可以是图片路径，也可以是纯 CSS 渐变（gradient: true）
+  var WALLPAPERS = [
+    { id: 'sakura', name: '樱花', image: 'img/wallpaper-sakura.webp' },
+    { id: 'dusk', name: '夜色', image: 'linear-gradient(160deg,#141b2b,#33406b 55%,#6f5f9e)', gradient: true },
+    { id: 'mint', name: '薄荷', image: 'linear-gradient(160deg,#dff3ec,#c3e2f6 60%,#e9e3fb)', gradient: true },
+    { id: 'peach', name: '蜜桃', image: 'linear-gradient(160deg,#ffe8de,#ffd2e2 55%,#e8dcff)', gradient: true },
+    { id: 'ink', name: '墨玉', image: 'linear-gradient(160deg,#0f131a,#222934 60%,#3a2f45)', gradient: true }
+  ];
 
   var ls = (function () {
     try { return (typeof localStorage !== 'undefined') ? localStorage : null; } catch (e) { return null; }
@@ -346,13 +356,62 @@
 
   function getSettings() {
     return Object.assign(
-      { nickname: '打工人', notify: true, updateBase: DEFAULT_UPDATE_BASE, confirmDone: true },
+      {
+        nickname: '打工人',
+        notify: true,
+        updateBase: DEFAULT_UPDATE_BASE,
+        confirmDone: true,
+        wallpaper: '',      // '' = 默认背景；预设 id；'custom' = 用自己选的照片
+        wallpaperDim: 30    // 遮罩浓度（0-80，越大文字越清楚）
+      },
       read(KEY_SETTINGS, {})
     );
   }
 
   function saveSettings(patch) {
     write(KEY_SETTINGS, Object.assign({}, getSettings(), patch));
+  }
+
+  /* ---------- 自定义壁纸图片（单独 key 存，避免每次改设置都重写一大串） ---------- */
+  function getWallpaperImage() {
+    var v = storage.getRaw(KEY_WALLPAPER);
+    return v ? String(v) : '';
+  }
+
+  function setWallpaperImage(dataUrl) {
+    if (!dataUrl) {
+      storage.removeRaw(KEY_WALLPAPER);
+      return;
+    }
+    storage.setRaw(KEY_WALLPAPER, String(dataUrl));
+  }
+
+  // 算出当前生效的壁纸：{ image, dim, kind }（image 为空 = 用默认背景）
+  function wallpaperCss(settings, customImage) {
+    var s = settings || {};
+    var dim = Number(s.wallpaperDim);
+    if (!isFinite(dim)) dim = 30;
+    dim = Math.max(0, Math.min(80, Math.round(dim)));
+
+    var id = s.wallpaper || '';
+    if (!id) return { image: '', dim: dim, kind: 'none' };
+
+    if (id === 'custom') {
+      var url = customImage || '';
+      if (!url) return { image: '', dim: dim, kind: 'none' };
+      return { image: 'url("' + url + '")', dim: dim, kind: 'custom', url: url };
+    }
+
+    var preset = null;
+    WALLPAPERS.forEach(function (p) { if (p.id === id) preset = p; });
+    if (!preset) return { image: '', dim: dim, kind: 'none' };
+    return {
+      image: preset.gradient ? preset.image : 'url("' + preset.image + '")',
+      dim: dim,
+      kind: 'preset',
+      id: preset.id,
+      url: preset.gradient ? '' : preset.image
+    };
   }
 
   function getNotifiedKeys() { return read(KEY_NOTIFIED, []); }
@@ -436,6 +495,8 @@
     deleteCategory: deleteCategory,
     getSettings: getSettings,
     saveSettings: saveSettings,
+    getWallpaperImage: getWallpaperImage,
+    setWallpaperImage: setWallpaperImage,
     getNotifiedKeys: getNotifiedKeys,
     saveNotifiedKeys: saveNotifiedKeys,
     exportData: exportData,
@@ -700,6 +761,8 @@
     APP_VERSION: APP_VERSION,
     DEFAULT_UPDATE_BASE: DEFAULT_UPDATE_BASE,
     DATA_VERSION: DATA_VERSION,
+    WALLPAPERS: WALLPAPERS,
+    wallpaperCss: wallpaperCss,
     storage: storage,
     datetime: datetime,
     store: store,

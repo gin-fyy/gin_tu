@@ -15,6 +15,9 @@
 <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
+<!-- 壁纸层：固定在内容下方，不影响点击 -->
+<div id="wallpaperLayer" class="wallpaper-layer" hidden></div>
+<div id="wallpaperDim" class="wallpaper-dim" hidden></div>
 <div id="app">
   <header class="topbar">
     <div class="topbar-title">我的工作台</div>
@@ -103,6 +106,23 @@
           <button id="notifyTest" class="mini-btn ghost">测试通知</button>
         </div>
         <div class="tip" id="notifyState" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">外观 · 壁纸</div>
+        <div class="tip">选一张喜欢的壁纸；卡片会自动半透明，文字照样看得清。自己选的照片会先压缩再存在本机。</div>
+        <div class="wp-grid" id="wpGrid" style="margin-top:12px"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="mini-btn" id="wpPickBtn">选择照片</button>
+          <button class="mini-btn ghost" id="wpClearBtn">恢复默认背景</button>
+        </div>
+        <input type="file" id="wpFile" accept="image/*" hidden />
+        <div class="row" style="margin-top:14px; align-items:center">
+          <span class="tip" style="flex:0 0 64px">遮罩</span>
+          <input type="range" id="wpDim" min="0" max="80" step="5" />
+          <span class="tip" id="wpDimVal" style="flex:0 0 42px; text-align:right">30%</span>
+        </div>
+        <div class="tip" id="wpState" style="margin-top:8px"></div>
       </div>
 
       <div class="card">

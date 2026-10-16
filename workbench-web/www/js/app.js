@@ -616,6 +616,105 @@
     var ub = $('updateBaseInput');
     if (document.activeElement !== ub) ub.value = s.updateBase || '';
     $('appFooter').textContent = '我的工作台 · v' + LOCAL_VERSION.version + (Native ? ' · App' : ' · 网页版');
+
+    renderWallpaperGrid();
+    applyWallpaper();
+  }
+
+  /* ===================== 壁纸 ===================== */
+  function renderWallpaperGrid() {
+    var s = S.getSettings();
+    var cur = s.wallpaper || '';
+    var custom = S.getWallpaperImage();
+    var items = [{ id: '', name: '无', none: true }].concat(window.WB.WALLPAPERS);
+    if (custom) items.push({ id: 'custom', name: '我的', image: 'url("' + custom + '")' });
+
+    $('wpGrid').innerHTML = items.map(function (p) {
+      var bg = '';
+      if (p.image) bg = (p.image.indexOf('url(') === 0 || p.image.indexOf('linear-gradient') === 0)
+        ? 'background-image:' + p.image
+        : 'background-image:url("' + p.image + '")';
+      var cls = 'wp-item' + (p.none ? ' none' : '') + (cur === p.id ? ' on' : '');
+      return '<button class="' + cls + '" data-wp="' + esc(p.id) + '" style="' + bg + '">' + esc(p.name) + '</button>';
+    }).join('');
+  }
+
+  function applyWallpaper() {
+    var s = S.getSettings();
+    var w = window.WB.wallpaperCss(s, S.getWallpaperImage());
+    var layer = $('wallpaperLayer');
+    var dim = $('wallpaperDim');
+
+    if (w.image) {
+      layer.hidden = false;
+      layer.style.backgroundImage = w.image;
+      dim.hidden = false;
+      dim.style.background = 'rgba(12,16,24,' + (w.dim / 100) + ')';
+      document.body.classList.add('wb-wallpaper');
+    } else {
+      layer.hidden = true;
+      layer.style.backgroundImage = '';
+      dim.hidden = true;
+      document.body.classList.remove('wb-wallpaper');
+    }
+
+    var slider = $('wpDim');
+    if (slider) slider.value = String(w.dim);
+    $('wpDimVal').textContent = w.dim + '%';
+    $('wpState').textContent = w.kind === 'custom'
+      ? '当前：我的照片（存在本机，删掉 App 数据会丢）'
+      : (w.kind === 'preset' ? '当前：内置壁纸' : '当前：默认背景');
+  }
+
+  function pickWallpaper(id) {
+    if (id === 'custom' && !S.getWallpaperImage()) { $('wpFile').click(); return; }
+    S.saveSettings({ wallpaper: id || '' });
+    renderWallpaperGrid();
+    applyWallpaper();
+    toast(id ? '壁纸已更换' : '已恢复默认背景');
+  }
+
+  // 选照片 → 压缩后再存（localStorage 空间有限）
+  function onWallpaperFile(file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type || '')) { toast('请选择图片文件'); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      function save(data, note) {
+        S.setWallpaperImage(data);
+        S.saveSettings({ wallpaper: 'custom' });
+        renderWallpaperGrid();
+        applyWallpaper();
+        toast('壁纸已更新' + (note ? '（' + note + '）' : ''));
+      }
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var maxW = 1080;
+          var scale = Math.min(1, maxW / (img.width || maxW));
+          var cw = Math.max(1, Math.round((img.width || maxW) * scale));
+          var ch = Math.max(1, Math.round((img.height || maxW) * scale));
+          var cv = document.createElement('canvas');
+          cv.width = cw;
+          cv.height = ch;
+          var ctx = cv.getContext('2d');
+          if (!ctx) throw new Error('no-canvas');
+          ctx.drawImage(img, 0, 0, cw, ch);
+          var data = cv.toDataURL('image/jpeg', 0.82);
+          if (data.length > 2400000) { toast('这张图压完还是太大，换一张小点的吧'); return; }
+          save(data, Math.round(data.length / 1024) + 'KB');
+        } catch (e) {
+          // 环境不支持 canvas 时退回原图（可能较大，但能用）
+          var raw = reader.result;
+          if (raw && raw.length > 2400000) { toast('这张图太大，换一张小点的吧'); return; }
+          save(raw, '');
+        }
+      };
+      img.onerror = function () { toast('这张图片读不了，换一张试试'); };
+      img.src = reader.result;
+    };
+    reader.onerror = function () { toast('读取图片失败'); };
+    reader.readAsDataURL(file);
   }
 
   function renderNotifyState() {
@@ -935,6 +1034,28 @@
       $('updateBaseInput').value = v;
       toast(v ? '更新地址已保存' : '已清空更新地址');
     });
+    // 壁纸
+    $('wpGrid').addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('[data-wp]') : null;
+      if (btn) pickWallpaper(btn.getAttribute('data-wp') || '');
+    });
+    $('wpPickBtn').addEventListener('click', function () { $('wpFile').click(); });
+    $('wpFile').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0];
+      onWallpaperFile(f);
+      e.target.value = '';
+    });
+    $('wpClearBtn').addEventListener('click', function () {
+      S.saveSettings({ wallpaper: '' });
+      renderWallpaperGrid();
+      applyWallpaper();
+      toast('已恢复默认背景');
+    });
+    $('wpDim').addEventListener('input', function (e) {
+      S.saveSettings({ wallpaperDim: Number(e.target.value) || 0 });
+      applyWallpaper();
+    });
+
     $('checkUpdateBtn').addEventListener('click', checkApkUpdate);
     $('checkOtaBtn').addEventListener('click', checkOtaUpdate);
     // 地址被改坏了一键回到内置源（不用手打长网址）

@@ -588,6 +588,42 @@ function makeCases(mode) {
     eq(p([a, { base: 'a2', remote: { version: '1.1.3', versionCode: 3 } }]).base, 'a');
   };
 
+  cases['壁纸: wallpaperCss 预设/自定义/遮罩'] = (WB) => {
+    // 默认没有壁纸
+    let w = WB.wallpaperCss({ wallpaper: '', wallpaperDim: 30 }, '');
+    eq(w.kind, 'none');
+    eq(w.image, '');
+    eq(w.dim, 30);
+
+    // 内置预设（樱花是图片，其他是渐变）
+    w = WB.wallpaperCss({ wallpaper: 'sakura', wallpaperDim: 40 }, '');
+    eq(w.kind, 'preset');
+    ok(w.image.indexOf('wallpaper-sakura.webp') > 0, '樱花壁纸应指向图片：' + w.image);
+    eq(w.dim, 40);
+
+    w = WB.wallpaperCss({ wallpaper: 'dusk', wallpaperDim: 0 }, '');
+    ok(w.image.indexOf('linear-gradient') === 0, '渐变壁纸应直接用 CSS 渐变：' + w.image);
+
+    // 自定义照片
+    w = WB.wallpaperCss({ wallpaper: 'custom', wallpaperDim: 30 }, 'data:image/jpeg;base64,AAAA');
+    eq(w.kind, 'custom');
+    ok(w.image.indexOf('data:image/jpeg') > 0, '自定义壁纸应使用 dataURL');
+
+    // 选了 custom 但没有图 → 退回默认，不报错
+    eq(WB.wallpaperCss({ wallpaper: 'custom' }, '').kind, 'none');
+
+    // 遮罩浓度会被限制在 0-80
+    eq(WB.wallpaperCss({ wallpaper: 'sakura', wallpaperDim: 999 }, '').dim, 80);
+    eq(WB.wallpaperCss({ wallpaper: 'sakura', wallpaperDim: -5 }, '').dim, 0);
+    eq(WB.wallpaperCss({ wallpaper: 'sakura' }, '').dim, 30);
+
+    // 内置壁纸列表至少有 4 个，且都带 id/name
+    ok(WB.WALLPAPERS.length >= 4, '内置壁纸至少 4 个');
+    WB.WALLPAPERS.forEach((p) => {
+      ok(!!p.id && !!p.name && !!p.image, '壁纸条目要完整：' + JSON.stringify(p));
+    });
+  };
+
   return cases;
 }
 

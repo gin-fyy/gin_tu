@@ -48,6 +48,7 @@ textarea { resize: vertical; }
   min-height: 100vh;
   background: var(--bg);
   position: relative;
+  z-index: 2;
   padding-bottom: 84px;
 }
 
@@ -351,6 +352,50 @@ main { padding: 0 16px; }
 .s-sub { font-size: 12px; color: var(--muted); }
 .switch { width: 46px; height: 26px; flex-shrink: 0; }
 select { width: auto; }
+
+/* ===== 壁纸 ===== */
+.wallpaper-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+.wallpaper-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(12, 16, 24, 0.3);
+}
+body.wb-wallpaper { background: #10141c; }
+body.wb-wallpaper #app { background: transparent; }
+body.wb-wallpaper .card { background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(6px); }
+body.wb-wallpaper .topbar { background: rgba(255, 255, 255, 0.74); }
+body.wb-wallpaper .tabbar { background: rgba(255, 255, 255, 0.86); }
+
+.wp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.wp-item {
+  position: relative;
+  height: 62px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 3px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+  box-shadow: var(--shadow);
+}
+.wp-item.on { border-color: var(--primary); }
+.wp-item.none { background: #EEF1F6; color: var(--muted); text-shadow: none; }
+input[type="range"] { padding: 0; border: none; background: transparent; }
 
 /* ===== 更新弹窗 ===== */
 .modal-mask {

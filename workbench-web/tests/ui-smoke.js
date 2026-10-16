@@ -477,6 +477,35 @@ function injectApkInstaller(w) {
     }
   });
 
+  await test('壁纸：选预设 / 调遮罩 / 恢复默认', async (w) => {
+    click(w, $(w, '.tab[data-view="mine"]'));
+    const grid = $(w, '#wpGrid');
+    if (!grid.children.length) throw new Error('壁纸格子没渲染出来');
+
+    const sakura = grid.querySelector('[data-wp="sakura"]');
+    if (!sakura) throw new Error('找不到「樱花」壁纸');
+    click(w, sakura);
+    if (!w.document.body.classList.contains('wb-wallpaper')) throw new Error('选了壁纸但没生效');
+    if ($(w, '#wallpaperLayer').hidden) throw new Error('壁纸层没显示');
+    if ($(w, '#wallpaperLayer').style.backgroundImage.indexOf('wallpaper-sakura') < 0) {
+      throw new Error('壁纸层图片不对：' + $(w, '#wallpaperLayer').style.backgroundImage);
+    }
+    if (w.WB.store.getSettings().wallpaper !== 'sakura') throw new Error('壁纸设置没存下来');
+
+    const dim = $(w, '#wpDim');
+    dim.value = '60';
+    dim.dispatchEvent(new w.Event('input', { bubbles: true }));
+    if (w.WB.store.getSettings().wallpaperDim !== 60) throw new Error('遮罩浓度没存下来');
+    if ($(w, '#wallpaperDim').style.background.indexOf('0.6') < 0) {
+      throw new Error('遮罩层没更新：' + $(w, '#wallpaperDim').style.background);
+    }
+
+    click(w, $(w, '#wpClearBtn'));
+    if (w.document.body.classList.contains('wb-wallpaper')) throw new Error('恢复默认后壁纸还在');
+    if ($(w, '#wallpaperLayer').hidden !== true) throw new Error('恢复默认后壁纸层没隐藏');
+    if (w.WB.store.getSettings().wallpaper !== '') throw new Error('恢复默认没写进设置');
+  });
+
   await test('更新弹窗：App 内下载安装（含进度与忽略）', async (w) => {
     const calls = w.__calls;
     w.fetch = () => Promise.resolve({
