@@ -618,6 +618,7 @@
 
     // 版本 / 更新地址
     $('confirmDoneSwitch').checked = s.confirmDone !== false;
+    $('petMortalSwitch').checked = s.petMortal !== false;
     $('versionLine').textContent = LOCAL_VERSION.version + (LOCAL_VERSION.versionCode ? ' (' + LOCAL_VERSION.versionCode + ')' : '');
     var ub = $('updateBaseInput');
     if (document.activeElement !== ub) ub.value = s.updateBase || '';
@@ -1490,7 +1491,7 @@
     var todayXp = settle ? settle.todayXp : (Number(st.dayXp) || 0);
     var cap = settle ? settle.cap : (Number(st.dailyXpCap) || window.WB.PET_RULES.dailyXpCap);
     var wasAlive = st.alive;
-    st = window.WB.petTick(st, Date.now());
+    st = window.WB.petTick(st, Date.now(), { lifespan: S.getSettings().petMortal !== false });
     if (wasAlive && !st.alive) {
       S.addPetMemorial({
         name: st.name,
@@ -1520,6 +1521,7 @@
         ' · 寿命约 ' + snap.lifespanDays + ' 天';
     }
     hint += ' · 今日经验 ' + Math.round(todayXp) + '/' + cap;
+    if (S.getSettings().petMortal === false) hint += ' · 已关掉生老病死';
     if (settle && settle.skippedFast) hint += '（有 ' + settle.skippedFast + ' 个建完不到 2 小时就勾掉的，不算）';
     if (settle && settle.capHit) hint += ' · 今日经验已满，明天再来 💤';
     if (snap.sick) hint += ' · 生病了，快治疗 💊';
@@ -1662,7 +1664,10 @@
       ? petSvg(st.species, window.WB.petStage(st, Date.now()), { sick: !!st.sick, mood: st.mood })
       : petSvg('whale', 'baby', {});
     $('focusTime').textContent = fmtMS(pomoRemainSec());
-    $('focusTip').textContent = '专注中 —— 放下手机，它陪你学完这一段';
+    var st2 = S.getPet();
+    $('focusTip').textContent = st2 && st2.alive
+      ? ('专注中 —— ' + st2.name + '在陪你学习')
+      : '专注中 —— 放下手机，学完这一段';
     $('focusSub').textContent = '';
     $('focusGiveUp').textContent = '放弃这段专注';
     focusGiveUpArmed = 0;
@@ -1708,8 +1713,19 @@
     pomo.count = (Number(pomo.count) || 0) + 1;
     savePomoState();
     hideFocusLock();
+
+    // 番茄钟 × 宠物：完成一段专注（≥30 分钟）也给宠物加经验（同样受每日上限约束）
+    var petNow = S.getPet();
+    var reward = null;
+    if (petNow && petNow.alive) {
+      reward = window.WB.petGainXp(petNow, window.WB.PET_RULES.xpPerPomodoro, window.WB.PET_RULES.foodPerPomodoro, Date.now());
+      S.savePet(reward.state);
+    }
+
     if (!silent && !fromLoad) {
-      toast('🍅 一个番茄完成！起来活动一下');
+      toast(reward && reward.gained > 0
+        ? ('🍅 一个番茄完成！宠物 +' + reward.gained + ' 经验')
+        : '🍅 一个番茄完成！起来活动一下');
       cancelPomoNotify();
     }
     if (fromLoad) return pomo;
@@ -2259,6 +2275,13 @@
       var on = !!e.target.checked;
       S.saveSettings({ confirmDone: on });
       toast(on ? '已开启完成二次确认' : '已关闭完成二次确认');
+    });
+
+    $('petMortalSwitch').addEventListener('change', function (e) {
+      var on = !!e.target.checked;
+      S.saveSettings({ petMortal: on });
+      toast(on ? '宠物会生老病死（请多陪它）' : '已关掉生老病死：它只会慢慢变老');
+      renderPet();
     });
 
     $('exportBtn').addEventListener('click', exportFile);

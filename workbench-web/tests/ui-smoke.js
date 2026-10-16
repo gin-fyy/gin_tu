@@ -867,6 +867,31 @@ function injectApkInstaller(w) {
     click(w, $(w, '#petPlay'));
     if (!w.WB.store.getPet().lastPlayAt) throw new Error('陪玩没记录时间');
 
+    // 生老病死开关：默认开
+    click(w, $(w, '.tab[data-view="mine"]'));
+    const mortal = $(w, '#petMortalSwitch');
+    if (!mortal) throw new Error('偏好设置里应该有「宠物会生老病死」开关');
+    if (mortal.checked !== true) throw new Error('默认应该是开启的');
+    mortal.checked = false;
+    mortal.dispatchEvent(new w.Event('change', { bubbles: true }));
+    if (w.WB.store.getSettings().petMortal !== false) throw new Error('开关没存下来');
+
+    // 关掉后：把出生时间调到 300 天前也不该离世
+    w.WB.store.savePet(Object.assign({}, w.WB.store.getPet(), { bornAt: Date.now() - 300 * 86400000, alive: true }));
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await sleep(60);
+    if (!w.WB.store.getPet().alive) throw new Error('关掉生老病死就不该离世');
+
+    // 打开开关：超龄应寿终，并记入纪念册、出现领养按钮
+    mortal.checked = true;
+    mortal.dispatchEvent(new w.Event('change', { bubbles: true }));
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await sleep(60);
+    if (w.WB.store.getPet().alive) throw new Error('打开开关后超龄应该寿终');
+    if (w.WB.store.getPetMemorial().length !== 1) throw new Error('应记入纪念册：' + w.WB.store.getPetMemorial().length);
+    if ($(w, '#petAdopt').hidden) throw new Error('离世后应出现领养新蛋按钮');
+    if ($(w, '#petName').textContent.indexOf('回到了星海') < 0) throw new Error('应显示告别：' + $(w, '#petName').textContent);
+
     // 每日一句
     const q1 = $(w, '#quoteText').textContent;
     if (!q1 || q1 === '—') throw new Error('每日一句没渲染');

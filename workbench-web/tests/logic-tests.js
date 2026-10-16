@@ -999,6 +999,38 @@ function makeCases(mode) {
     ok(r2.todayXp <= 10, '跨天后今日经验应重新计算：' + r2.todayXp);
   };
 
+  cases['宠物: 番茄钟奖励也走每日上限'] = (WB) => {
+    const T0 = 1760000000000;
+    const pet = WB.store.adoptPet('渊', 'whale', T0);
+    const dayKey = WB.datetime.toDateStr(new Date(T0));
+
+    // 完成一段番茄：+20 经验 +1 食物
+    let r = WB.petGainXp(pet, WB.PET_RULES.xpPerPomodoro, WB.PET_RULES.foodPerPomodoro, T0);
+    eq(r.gained, 20);
+    eq(r.state.xp, 20);
+    eq(r.state.food, 4);
+    eq(r.capHit, false);
+
+    // 距离上限只剩 10 → 只给 10，且不满额就不发食物
+    r = WB.petGainXp(Object.assign({}, pet, { dayKey: dayKey, dayXp: 110 }), 20, 1, T0);
+    eq(r.gained, 10);
+    eq(r.capHit, true);
+    eq(r.todayXp, 120);
+    eq(r.state.food, 3);
+
+    // 已经满了 → 一点都不加
+    r = WB.petGainXp(Object.assign({}, pet, { dayKey: dayKey, dayXp: 120 }), 20, 1, T0);
+    eq(r.gained, 0);
+    eq(r.capHit, true);
+
+    // 番茄钟经验也能把蛋孵化（30 经验 = 两段番茄）
+    let egg = Object.assign({}, pet, { hatchedAt: 0, xp: 0, dayXp: 0 });
+    r = WB.petGainXp(egg, 20, 1, T0);
+    eq(r.state.hatchedAt, 0);
+    r = WB.petGainXp(r.state, 20, 1, T0 + 1000);
+    ok(r.state.hatchedAt > 0, '两段番茄（40 经验）应该能孵化：' + r.state.hatchedAt);
+  };
+
   return cases;
 }
 

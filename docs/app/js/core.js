@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.6.0';
+  var APP_VERSION = '1.6.1';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -374,6 +374,7 @@
         glass: false,       // 液态玻璃效果
         glassBlur: 18,      // 玻璃模糊强度 px
         wheelSource: 'custom', // 转盘选项来源：custom | tasks
+        petMortal: true,       // 宠物是否遵循生老病死（关掉就只变老、不会离世）
         aiEndpoint: AI_DEFAULT_ENDPOINT,  // 图片识别课表的视觉模型接口
         aiModel: AI_DEFAULT_MODEL,
         aiKey: '',                          // 只存在本机，不会上传到别处
@@ -616,7 +617,9 @@
     healthRecoverPerHour: 1.2,   // 状态好会慢慢恢复
     healCost: 2,
     healAmount: 40,
-    sickHealth: 30
+    sickHealth: 30,
+    xpPerPomodoro: 20,        // 完成一段番茄钟（≥30 分钟）也给宠物 20 经验
+    foodPerPomodoro: 1
   };
 
   var PET_SPECIES = [
@@ -700,8 +703,22 @@
   // 时间流逝：掉饱食/心情，状态差就掉健康、生病，寿命到/健康见底就离世
   function petTick(state, now, opts) {
     var s = Object.assign({}, state || {});
-    if (!s.alive) { s.lastTickAt = Number(now) || Date.now(); return s; }
     var t = Number(now) || Date.now();
+    var lifespanOff = opts && opts.lifespan === false;
+
+    // 寿命判定与"隔了多久"无关：每次都要查，否则连着刷新两次就会漏判寿终
+    if (s.alive && !lifespanOff) {
+      var life = Number(s.lifespanDays) || PET_RULES.lifespanDays;
+      if (days(t - (Number(s.bornAt) || t)) >= life) {
+        s.alive = false;
+        s.diedAt = t;
+        s.cause = '寿终';
+        s.lastTickAt = t;
+        return s;
+      }
+    }
+    if (!s.alive) { s.lastTickAt = t; return s; }
+
     var last = Number(s.lastTickAt) || t;
     var hours = Math.max(0, (t - last) / 3600000);
     if (hours <= 0.002) return s;
@@ -716,18 +733,10 @@
     s.sick = s.health <= PET_RULES.sickHealth;
     s.lastTickAt = t;
 
-    var lifespanOff = opts && opts.lifespan === false;
-    if (!lifespanOff) {
-      var life = Number(s.lifespanDays) || PET_RULES.lifespanDays;
-      if (days(t - (Number(s.bornAt) || t)) >= life) {
-        s.alive = false;
-        s.diedAt = t;
-        s.cause = '寿终';
-      } else if (s.health <= 0) {
-        s.alive = false;
-        s.diedAt = t;
-        s.cause = '体弱';
-      }
+    if (!lifespanOff && s.health <= 0) {
+      s.alive = false;
+      s.diedAt = t;
+      s.cause = '体弱';
     }
     return s;
   }
@@ -756,38 +765,49 @@
   }
 
   /**
+   * 通用加经验（受每日上限约束）：任务完成、番茄钟奖励都走这里。
+   * 返回 { state, gained, capHit, todayXp, cap }
+   */
+  function petGainXp(state, xp, food, now) {
+    var s = Object.assign({}, state || {});
+    var t = Number(now) || Date.now();
+    var want = Math.max(0, Number(xp) || 0);
+    var dayKey = toDateStr(new Date(t));
+    if (s.dayKey !== dayKey) { s.dayKey = dayKey; s.dayXp = 0; }
+    var cap = Number(s.dailyXpCap) || PET_RULES.dailyXpCap;
+    var room = Math.max(0, cap - (Number(s.dayXp) || 0));
+    var got = Math.min(want, room);
+    if (got > 0) {
+      s.xp = (Number(s.xp) || 0) + got;
+      s.dayXp = (Number(s.dayXp) || 0) + got;
+      if (got >= want) s.food = (Number(s.food) || 0) + (Number(food) || 0);
+      s.mood = pct(Number(s.mood) + 4);
+      if (!s.hatchedAt && s.xp >= PET_RULES.hatchXp) s.hatchedAt = t;
+    }
+    s.dayKey = dayKey;
+    return {
+      state: s,
+      gained: got,
+      capHit: got < want,
+      todayXp: Number(s.dayXp) || 0,
+      cap: cap
+    };
+  }
+
+  /**
    * 从"新增的完成记录"里结算成长：跳过速通、受每日上限约束。
    * 返回 { state, gained, skippedFast, capHit, todayXp, cap }
    */
   function petGainFromCompletions(state, comps, now) {
-    var s = Object.assign({}, state || {});
-    var t = Number(now) || Date.now();
-    var dayKey = toDateStr(new Date(t));
-    if (s.dayKey !== dayKey) { s.dayKey = dayKey; s.dayXp = 0; }
-    var todayXp = Number(s.dayXp) || 0;
-    var cap = Number(s.dailyXpCap) || PET_RULES.dailyXpCap;
-
-    var gained = 0;
+    var eligible = 0;
     var skippedFast = 0;
-    var capHit = false;
     (comps || []).forEach(function (c) {
       if (!petCountable(c)) { skippedFast++; return; }
-      var room = cap - todayXp;
-      if (room <= 0) { capHit = true; return; }
-      var one = Math.min(PET_RULES.xpPerTask, room);
-      todayXp += one;
-      gained += one;
+      eligible++;
     });
-
-    if (gained > 0) {
-      s.xp = (Number(s.xp) || 0) + gained;
-      s.food = (Number(s.food) || 0) + Math.round(gained / PET_RULES.xpPerTask) * PET_RULES.foodPerTask;
-      s.mood = pct(Number(s.mood) + PET_RULES.moodPerTask * (gained / PET_RULES.xpPerTask));
-      if (!s.hatchedAt && s.xp >= PET_RULES.hatchXp) s.hatchedAt = t;
-    }
-    s.dayKey = dayKey;
-    s.dayXp = todayXp;
-    return { state: s, gained: gained, skippedFast: skippedFast, capHit: capHit, todayXp: todayXp, cap: cap };
+    var r = petGainXp(state, eligible * PET_RULES.xpPerTask, eligible * PET_RULES.foodPerTask, now);
+    r.skippedFast = skippedFast;
+    return r;
   }
   function petGain(state, tasks, now) {
     var s = Object.assign({}, state || {});
@@ -1788,6 +1808,7 @@
     petTick: petTick,
     petStage: petStage,
     petGain: petGain,
+    petGainXp: petGainXp,
     petCountable: petCountable,
     petGainFromCompletions: petGainFromCompletions,
     petFeed: petFeed,
