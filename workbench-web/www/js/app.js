@@ -760,6 +760,7 @@
     var info = courseWeekInfo();
     var courses = S.getCourses();
     var weekend = s.courseWeekend !== false;
+    var periods = C.periodsOf(s);
     var days = weekend ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5];
 
     var maxPeriod = 8;
@@ -774,7 +775,7 @@
       html.push('<div class="cg-day' + (d === todayWd && cwOffset === 0 ? ' today' : '') + '">' + C.WEEKDAY_LABELS[d - 1] + '</div>');
     });
     for (var p = 1; p <= maxPeriod; p++) {
-      html.push('<div class="cg-period" style="grid-row:' + (p + 1) + '; grid-column:1"><b>' + p + '</b><span>' + shortTime(C.periodTime(p)) + '</span></div>');
+      html.push('<div class="cg-period" style="grid-row:' + (p + 1) + '; grid-column:1"><b>' + p + '</b><span>' + shortTime(C.periodTime(p, periods)) + '</span></div>');
       days.forEach(function (d, di) {
         html.push('<div class="cg-empty" style="grid-row:' + (p + 1) + '; grid-column:' + (di + 2) + '"></div>');
       });
@@ -815,7 +816,7 @@
             '<span class="ci-color" style="background:' + esc(c.color || '#4C6EF5') + '"></span>' +
             '<div class="ci-main">' +
               '<div class="ci-name">' + esc(c.name) + '</div>' +
-              '<div class="tip">' + C.periodLabel(c) + ' · ' + esc(C.periodTime(c.startPeriod)) +
+              '<div class="tip">' + C.periodLabel(c) + ' · ' + esc(C.periodTime(c.startPeriod, periods)) +
                 (c.room ? ' · ' + esc(c.room) : '') + (c.teacher ? ' · ' + esc(c.teacher) : '') + '</div>' +
             '</div>' +
           '</div>';
@@ -1028,6 +1029,43 @@
     });
   }
 
+  // 测试 AI 是否可用（纯文字的最小请求）——手机上出问题时点它看真实错误
+  function testAiConnection() {
+    var s = S.getSettings();
+    var key = aiKeyOf();
+    var endpoint = (s.aiEndpoint || window.WB.AI_DEFAULT_ENDPOINT).trim();
+    var model = (s.aiModel || window.WB.AI_DEFAULT_MODEL).trim();
+    if (!key) { $('aiState').textContent = '✗ 还没填 API Key'; return; }
+    $('aiState').textContent = '正在测试（' + model + '）…';
+    var t0 = Date.now();
+    withTimeout(fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+      body: JSON.stringify({
+        model: model,
+        stream: false,
+        max_tokens: 8,
+        messages: [{ role: 'user', content: '回复一个「好」字' }]
+      })
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var secs = ((Date.now() - t0) / 1000).toFixed(1);
+        if (r.ok) {
+          $('aiState').textContent = '✓ 连接正常（HTTP ' + r.status + '，' + secs + 's）：' + String(t).replace(/\s+/g, ' ').slice(0, 120);
+          toast('AI 连接正常');
+        } else {
+          $('aiState').textContent = '✗ 接口返回 HTTP ' + r.status + '：' + String(t).replace(/\s+/g, ' ').slice(0, 220);
+          toast('AI 返回 HTTP ' + r.status);
+        }
+        return null;
+      });
+    }), 40000, '测试超时（40 秒）').catch(function (e) {
+      $('aiState').textContent = '✗ 连不上：' + ((e && e.message) ? e.message : String(e)) +
+        '（检查手机能否上网 / 接口地址 / Key 是否填对）';
+      toast('连不上 AI 接口');
+    });
+  }
+
   function onCourseImageFile(file) {
     if (!file) return;
     if (!aiKeyOf()) {
@@ -1039,20 +1077,29 @@
 
     var reader = new FileReader();
     reader.onload = function () {
+      var raw = String(reader.result || '');
       $('ciPreview').innerHTML = '<div class="tip">正在压缩图片…</div>';
-      compressImage(String(reader.result || ''), 1400, 0.85, function (small) {
-        $('ciPreview').innerHTML = '<div class="tip">正在让 AI 读课表（大概几秒到十几秒）…</div>';
-        callAiVision(small).then(function (text) {
+
+      function send(payload) {
+        $('ciPreview').innerHTML = '<div class="tip">正在让 AI 读课表（' + Math.round(payload.length / 1024) + 'KB，大概几秒到十几秒）…</div>';
+        withTimeout(callAiVision(payload), 90000, '识别超时（90 秒）').then(function (text) {
           var r = window.WB.coursesFromAiText(text);
           renderImportPreview(r, true);
           toast(r.courses.length ? ('识别到 ' + r.courses.length + ' 门课') : (r.error || '没识别出课程'));
         }).catch(function (e) {
           $('ciPreview').innerHTML = '<div class="ci-error">图片识别失败：' +
-            esc(e && e.message ? e.message : String(e)) + '</div>';
+            esc(e && e.message ? e.message : String(e)) +
+            '<br><br>可以：① 点上面「AI 配置 → 测试连接」看具体错误；② 截一张更清晰、只有课表的图；③ 直接用下面的文字导入。</div>';
         });
+      }
+
+      compressImage(raw, 1400, 0.85, function (mid) {
+        // 图片太大容易被接口拒绝：超过约 1.3MB 再压一次
+        if (mid.length > 1400000) compressImage(raw, 1000, 0.7, send);
+        else send(mid);
       });
     };
-    reader.onerror = function () { toast('读取图片失败'); };
+    reader.onerror = function () { toast('读取图片失败（换一张图试试）'); };
     reader.readAsDataURL(file);
   }
 
@@ -1204,6 +1251,28 @@
     window.requestAnimationFrame(frame);
   }
 
+  /* ---------- 节次时间（可编辑） ---------- */
+  function openPeriodsSheet() {
+    $('peText').value = C.periodsToText(C.periodsOf(S.getSettings()));
+    openSheet('periods');
+  }
+
+  function savePeriods() {
+    var list = C.parsePeriodsText($('peText').value || '');
+    if (!list.length) { toast('一行都没认出来，格式像这样：1 08:00-08:45'); return; }
+    S.saveSettings({ periods: list });
+    renderCourse();
+    closeSheet();
+    toast('已保存 ' + list.length + ' 节的时间');
+  }
+
+  function resetPeriods() {
+    S.saveSettings({ periods: null });
+    $('peText').value = C.periodsToText(null);
+    renderCourse();
+    toast('已恢复默认作息');
+  }
+
   /* ===================== 视图切换 ===================== */
   function showView(name) {
     state.view = name;
@@ -1228,6 +1297,7 @@
     $('sheetCourse').hidden = (which !== 'course');
     $('sheetCourseImport').hidden = (which !== 'courseImport');
     $('sheetWheel').hidden = (which !== 'wheel');
+    $('sheetPeriods').hidden = (which !== 'periods');
     // 让安卓返回键 / 浏览器后退先关掉弹层，而不是直接退出应用
     if (!sheetPushed) {
       try {
@@ -1244,6 +1314,7 @@
     $('sheetCourse').hidden = true;
     $('sheetCourseImport').hidden = true;
     $('sheetWheel').hidden = true;
+    $('sheetPeriods').hidden = true;
     if (sheetPushed) {
       sheetPushed = false;
       if (!fromPop) {
@@ -1546,6 +1617,10 @@
       renderCourse();
     });
     $('cwTermBtn').addEventListener('click', function () { $('cwTermRow').hidden = !$('cwTermRow').hidden; });
+    $('cwPeriodsBtn').addEventListener('click', openPeriodsSheet);
+    $('peClose').addEventListener('click', function () { closeSheet(); });
+    $('peSave').addEventListener('click', savePeriods);
+    $('peReset').addEventListener('click', resetPeriods);
     $('cwTermStart').addEventListener('change', function (e) {
       S.saveSettings({ termStart: e.target.value || '' });
       renderCourse();
@@ -1581,6 +1656,7 @@
     $('ciDo').addEventListener('click', doCourseImport);
     $('ciToggleAi').addEventListener('click', function () { $('aiCfg').hidden = !$('aiCfg').hidden; });
     $('aiSave').addEventListener('click', saveAiConfig);
+    $('aiTest').addEventListener('click', testAiConnection);
     $('ciImageBtn').addEventListener('click', function () {
       if (!aiKeyOf()) {
         $('aiCfg').hidden = false;

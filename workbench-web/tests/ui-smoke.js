@@ -726,6 +726,50 @@ function injectApkInstaller(w) {
     }
   });
 
+  await test('课表：节次时间可以自己改', async (w) => {
+    click(w, $(w, '.tab[data-view="course"]'));
+    if ($(w, '#courseGrid').textContent.indexOf('08:00') < 0) throw new Error('默认作息没显示在课表上');
+
+    click(w, $(w, '#cwPeriodsBtn'));
+    if ($(w, '#sheetPeriods').hidden) throw new Error('节次时间弹层没打开');
+    if (($(w, '#peText').value || '').indexOf('08:00-08:45') < 0) throw new Error('没带出当前作息');
+
+    type(w, $(w, '#peText'), '1 07:30-08:15\n2 08:25-09:10');
+    click(w, $(w, '#peSave'));
+    const saved = w.WB.store.getSettings().periods;
+    if (!saved || saved.length !== 2) throw new Error('自定义作息没存下来：' + JSON.stringify(saved));
+    if ($(w, '#courseGrid').textContent.indexOf('07:30') < 0) {
+      throw new Error('课表没跟着换成新时间：' + $(w, '#courseGrid').textContent.slice(0, 60));
+    }
+    if ($(w, '#sheetPeriods').hidden !== true) throw new Error('保存后弹层应关闭');
+
+    click(w, $(w, '#cwPeriodsBtn'));
+    click(w, $(w, '#peReset'));
+    if (w.WB.store.getSettings().periods !== null) throw new Error('恢复默认没生效');
+  });
+
+  await test('AI 配置：测试连接能把真实错误显示出来', async (w) => {
+    click(w, $(w, '.tab[data-view="course"]'));
+    click(w, $(w, '#courseImportBtn'));
+    click(w, $(w, '#ciToggleAi'));
+    type(w, $(w, '#aiKey'), 'k-123456');
+    click(w, $(w, '#aiSave'));
+    if (w.WB.store.getSettings().aiKey !== 'k-123456') throw new Error('Key 没保存');
+
+    w.fetch = () => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('{"choices":[{"message":{"content":"好"}}]}') });
+    click(w, $(w, '#aiTest'));
+    await sleep(150);
+    if ($(w, '#aiState').textContent.indexOf('✓') !== 0) {
+      throw new Error('正常时应报告成功：' + $(w, '#aiState').textContent);
+    }
+
+    w.fetch = () => Promise.resolve({ ok: false, status: 401, text: () => Promise.resolve('{"error":"令牌无效"}') });
+    click(w, $(w, '#aiTest'));
+    await sleep(150);
+    const st = $(w, '#aiState').textContent;
+    if (st.indexOf('HTTP 401') < 0) throw new Error('失败时应显示状态码：' + st);
+  });
+
   console.log('\n通过 ' + pass + ' 项，失败 ' + failures.length + ' 项');
   if (failures.length) {
     failures.forEach((f) => console.log('  ✗ ' + f));

@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.3.2';
+  var APP_VERSION = '1.3.3';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -371,7 +371,8 @@
         wheelSource: 'custom', // 转盘选项来源：custom | tasks
         aiEndpoint: AI_DEFAULT_ENDPOINT,  // 图片识别课表的视觉模型接口
         aiModel: AI_DEFAULT_MODEL,
-        aiKey: ''                          // 只存在本机，不会上传到别处
+        aiKey: '',                          // 只存在本机，不会上传到别处
+        periods: null                       // 节次时间表（null = 用内置默认作息）
       },
       read(KEY_SETTINGS, {})
     );
@@ -678,6 +679,38 @@
     var hit = null;
     list.forEach(function (p) { if (Number(p.no) === Number(no)) hit = p; });
     return hit ? hit.time : '';
+  }
+
+  // 节次时间表：用户可以在「课表 → 节次时间」里改；改坏了就退回默认
+  function periodsOf(settings) {
+    var list = settings && settings.periods;
+    if (!Array.isArray(list) || !list.length) return DEFAULT_PERIODS.slice();
+    var out = [];
+    list.forEach(function (p) {
+      var no = Number(p && p.no);
+      var time = String((p && p.time) || '').replace(/\s/g, '');
+      if (!no || !/^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/.test(time)) return;
+      out.push({ no: Math.max(1, Math.min(12, Math.round(no))), time: time });
+    });
+    out.sort(function (a, b) { return a.no - b.no; });
+    return out.length ? out : DEFAULT_PERIODS.slice();
+  }
+
+  function periodsToText(list) {
+    var arr = (Array.isArray(list) && list.length) ? list : DEFAULT_PERIODS;
+    return arr.map(function (p) { return p.no + ' ' + p.time; }).join('\n');
+  }
+
+  // 解析「1 08:00-08:45」这样的多行文本（一行一节）
+  function parsePeriodsText(text) {
+    var out = [];
+    String(text || '').split(/\r?\n/).forEach(function (line) {
+      var m = line.trim().match(/^(\d{1,2})\D+(\d{1,2}:\d{2})\s*[-~到至]\s*(\d{1,2}:\d{2})$/);
+      if (!m) return;
+      out.push({ no: Math.max(1, Math.min(12, Number(m[1]))), time: m[2] + '-' + m[3] });
+    });
+    out.sort(function (a, b) { return a.no - b.no; });
+    return out;
   }
 
   function periodLabel(c) {
@@ -1181,6 +1214,9 @@
       coursesOnDate: coursesOnDate,
       periodTime: periodTime,
       periodLabel: periodLabel,
+      periodsOf: periodsOf,
+      periodsToText: periodsToText,
+      parsePeriodsText: parsePeriodsText,
       courseWeeksLabel: courseWeeksLabel,
       parseCourseLine: parseCourseLine,
       parseCourseText: parseCourseText

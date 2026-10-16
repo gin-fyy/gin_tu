@@ -784,6 +784,28 @@ function makeCases(mode) {
     eq(trailing.courses[0].name, 'A');
   };
 
+  cases['课表: 节次时间可以自己改'] = (WB) => {
+    const d = WB.course.periodsOf({});
+    ok(d.length >= 8, '默认作息至少 8 节');
+    eq(WB.course.periodTime(1, d), '08:00-08:45');
+
+    // 自定义（乱序也会按节次排好）
+    const list = WB.course.periodsOf({ periods: [{ no: 2, time: '09:00-09:45' }, { no: 1, time: '08:10-08:55' }] });
+    eq(list.length, 2);
+    eq(list[0].no, 1);
+    eq(WB.course.periodTime(2, list), '09:00-09:45');
+
+    // 坏数据过滤；全坏 → 退回默认
+    eq(WB.course.periodsOf({ periods: [{ no: 1, time: '乱写' }] }).length, WB.course.DEFAULT_PERIODS.length);
+
+    // 文本解析：一行一节，容忍 、/~/到 等写法
+    const p = WB.course.parsePeriodsText('1 08:00-08:45\n2、08:55-09:40\n3 10:00~10:45\n乱七八糟');
+    eq(p.length, 3);
+    eq(p[1].time, '08:55-09:40');
+    eq(p[2].time, '10:00-10:45');
+    ok(WB.course.periodsToText(p).indexOf('1 08:00-08:45') === 0, '导出文本：' + WB.course.periodsToText(p));
+  };
+
   return cases;
 }
 

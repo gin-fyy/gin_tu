@@ -80,6 +80,7 @@
           <button class="mini-btn" id="cwToday">回到本周</button>
           <button class="mini-btn ghost" id="cwWeekend">显示周末</button>
           <button class="mini-btn ghost" id="cwTermBtn">设置学期首周</button>
+          <button class="mini-btn ghost" id="cwPeriodsBtn">节次时间</button>
         </div>
         <div class="row" style="margin-top:10px; align-items:center" id="cwTermRow" hidden>
           <span class="tip" style="flex:0 0 92px">第 1 周周一</span>
@@ -446,6 +447,7 @@
         </label>
         <div class="row">
           <button class="mini-btn" id="aiSave">保存 AI 配置</button>
+          <button class="mini-btn ghost" id="aiTest">测试连接</button>
         </div>
       </div>
 
@@ -457,6 +459,22 @@
     </div>
     <div class="sheet-foot">
       <button class="btn-primary" id="ciDo" disabled>导入</button>
+    </div>
+  </div>
+
+  <!-- ===================== 节次时间 ===================== -->
+  <div class="sheet" id="sheetPeriods" hidden>
+    <div class="sheet-head">
+      <span>节次时间</span>
+      <button class="sheet-close" id="peClose">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="tip">一行一节，格式：<b>节次 开始-结束</b>（例如 <b>1 08:00-08:45</b>）。最多 12 节，按你们学校的作息改就行。</div>
+      <textarea id="peText" rows="10" placeholder="1 08:00-08:45&#10;2 08:55-09:40&#10;3 10:00-10:45"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="mini-btn" id="peSave">保存</button>
+        <button class="mini-btn ghost" id="peReset">恢复默认作息</button>
+      </div>
     </div>
   </div>
 
