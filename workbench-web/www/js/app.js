@@ -135,6 +135,17 @@
     });
   }
 
+  // 候选更新源 = 用户填的（优先）+ 内置默认源
+  // 这样即使「更新地址」被填成了某个固定/过期的地址（例如某个 commit 固定地址），
+  // 也不会漏掉新版本；用户自己填的源永远排在最前面。
+  function updateBases() {
+    var user = window.WB.update.parseBases(S.getSettings().updateBase);
+    var dflt = window.WB.update.parseBases(window.WB.DEFAULT_UPDATE_BASE);
+    var out = user.slice();
+    dflt.forEach(function (u) { if (out.indexOf(u) < 0) out.push(u); });
+    return out;
+  }
+
   // 依次尝试多个更新地址，返回第一个可用的：{ base, json }（热更新用：latest.json 不适合比"谁最新"）
   function fetchFirstJson(bases, pathSuffix, timeoutMs) {
     var i = 0;
@@ -175,7 +186,7 @@
 
   /* APK 自更新：读各源的 version.json → 取最新 → 弹更新弹窗 → 应用内下载安装 */
   function checkApkUpdate() {
-    var bases = window.WB.update.parseBases(S.getSettings().updateBase);
+    var bases = updateBases();
     if (!bases.length) {
       setUpdateState('先填更新地址：可填多个，一行一个（例如 CDN 地址 + 电脑上 node _tools/serve.js 打印的局域网地址）。');
       return;
@@ -205,7 +216,7 @@
       setUpdateState('热更新只在手机 App（APK）里可用；网页版刷新页面就是最新。');
       return;
     }
-    var bases = window.WB.update.parseBases(S.getSettings().updateBase);
+    var bases = updateBases();
     if (!bases.length) {
       setUpdateState('先填更新地址');
       return;
@@ -270,7 +281,7 @@
 
   // 依次用多个源下载安装包（某个源慢/断就换下一个；已下载部分由原生端断点续传）
   function downloadApkWithFallback(info, fileName) {
-    var bases = window.WB.update.parseBases(S.getSettings().updateBase);
+    var bases = updateBases();
     var urls = [];
     if (info.apkUrl) urls.push(info.apkUrl);   // 先用「报告了最新版本的那个源」
     bases.forEach(function (b) {
@@ -334,7 +345,7 @@
     var now = Date.now();
     if (!force && now - lastAutoCheck < 6 * 3600 * 1000) return;
     lastAutoCheck = now;
-    var bases = window.WB.update.parseBases(S.getSettings().updateBase);
+    var bases = updateBases();
     if (!bases.length) return;
     fetchNewest(bases, '/update/version.json', 6000).then(function (hit) {
       var res = window.WB.update.evaluate(LOCAL_VERSION, hit.remote, hit.base);

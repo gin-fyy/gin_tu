@@ -423,6 +423,43 @@ function injectApkInstaller(w) {
     if ($(w, '#updHint').textContent.indexOf('安装') < 0) throw new Error('没有提示去系统安装界面');
   }, injectApkInstaller);
 
+  await test('更新：地址被填成旧地址时仍会回退到内置源（不漏更新）', async (w) => {
+    click(w, $(w, '.tab[data-view="mine"]'));
+    type(w, $(w, '#updateBaseInput'), 'https://stale.example.com/old');
+    click(w, $(w, '#updateBaseSave'));
+
+    const asked = [];
+    w.fetch = (url) => {
+      const u = String(url);
+      asked.push(u);
+      // 用户填的源：只会返回一个旧版本（真实场景：某个 commit 固定地址）
+      if (u.indexOf('stale.example.com') >= 0) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ version: '1.1.0', versionCode: 1 }) });
+      }
+      // 内置默认源里有一个能给出新版本
+      if (u.indexOf('ghfast.top') >= 0) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ version: '9.9.9', versionCode: 99, apk: 'workbench-debug.apk', notes: ['内置源兜底'] })
+        });
+      }
+      return Promise.resolve({ ok: false, status: 500 });
+    };
+
+    click(w, $(w, '#checkUpdateBtn'));
+    await sleep(120);
+    if (asked.filter((u) => u.indexOf('stale.example.com') >= 0).length !== 1) {
+      throw new Error('没有先问用户填的源：' + JSON.stringify(asked));
+    }
+    if (!asked.some((u) => u.indexOf('ghfast.top') >= 0)) {
+      throw new Error('没有回退检查内置源：' + JSON.stringify(asked));
+    }
+    if ($(w, '#updateModal').hidden) throw new Error('内置源发现了新版本却没弹窗（漏更新）');
+    if ($(w, '#updVersion').textContent.indexOf('9.9.9') < 0) {
+      throw new Error('没有采用内置源的版本：' + $(w, '#updVersion').textContent);
+    }
+  });
+
   await test('更新弹窗：App 内下载安装（含进度与忽略）', async (w) => {
     const calls = w.__calls;
     w.fetch = () => Promise.resolve({
