@@ -586,6 +586,31 @@ input[type="range"] { padding: 0; border: none; background: transparent; }
 .pet-bar-fill.health { background: linear-gradient(90deg, #3ED36A, #12B886); }
 .pet-bar-val { flex: 0 0 34px; text-align: right; font-size: 11px; color: var(--muted); }
 
+/* ===== 专注锁屏（番茄钟进行中，全屏盖住 App） ===== */
+.focus-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(160deg, #0f1626, #1e2a44 58%, #2b1f3d);
+  color: #fff;
+}
+.focus-inner { text-align: center; max-width: 420px; }
+.focus-pet { display: flex; justify-content: center; }
+.focus-pet svg { width: 118px; height: 130px; }
+.focus-time { font-size: 54px; font-weight: 700; letter-spacing: 2px; font-variant-numeric: tabular-nums; margin: 8px 0 6px; }
+.focus-tip { font-size: 14.5px; opacity: 0.88; line-height: 1.7; }
+.focus-sub { margin-top: 12px; opacity: 0.72; }
+#focusGiveUp {
+  margin-top: 22px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
 /* ===== 窄屏微调 ===== */
 @media (max-width: 360px) {
   .stat-item .num { font-size: 20px; }

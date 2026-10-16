@@ -75,10 +75,10 @@
             <div class="s-title">🍅 番茄钟</div>
             <div class="tip" id="pomoState">还没开始</div>
           </div>
-          <div class="pomo-time" id="pomoTime">25:00</div>
+          <div class="pomo-time" id="pomoTime">30:00</div>
         </div>
         <div class="row" style="margin-top:10px">
-          <button class="mini-btn ghost pomo-min" data-pomo="25">25 分</button>
+          <button class="mini-btn ghost pomo-min" data-pomo="30">30 分</button>
           <button class="mini-btn ghost pomo-min" data-pomo="45">45 分</button>
           <button class="mini-btn ghost pomo-min" data-pomo="60">60 分</button>
         </div>
@@ -602,6 +602,17 @@
         <button class="mini-btn ghost" id="updIgnore">忽略此版本</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ===================== 专注锁屏（番茄钟进行中） ===================== -->
+<div id="focusLock" class="focus-lock" hidden>
+  <div class="focus-inner">
+    <div class="focus-pet" id="focusPet"></div>
+    <div class="focus-time" id="focusTime">30:00</div>
+    <div class="focus-tip" id="focusTip">专注中 —— 放下手机，它陪你学完这一段</div>
+    <button class="mini-btn ghost" id="focusGiveUp">放弃这段专注</button>
+    <div class="focus-sub tip" id="focusSub"></div>
   </div>
 </div>
 

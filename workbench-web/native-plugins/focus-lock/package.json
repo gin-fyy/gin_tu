@@ -1,0 +1,18 @@
+{
+  "name": "focus-lock",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地 Capacitor 插件：番茄钟专注期间请求 Android 屏幕固定（把界面钉在本 App 上）",
+  "files": [
+    "android/",
+    "README.md"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  }
+}

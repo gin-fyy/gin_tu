@@ -961,6 +961,44 @@ function makeCases(mode) {
     eq(WB.store.getPetMemorial()[0].name, '渊渊');
   };
 
+  cases['宠物: 每日上限 + 两小时内速通不给经验'] = (WB) => {
+    const T0 = 1760000000000;
+    const pet = WB.store.adoptPet('测', 'cat', T0);
+    pet.hatchedAt = T0 + 1;
+    const mk = (at, created, fast) => ({ taskId: 't', title: 'T', at: at, createdAt: created, fast: !!fast });
+
+    // 建完 1 小时就勾掉（速通）→ 不算
+    let r = WB.petGainFromCompletions(pet, [mk(T0 + 3600000, T0, true)], T0 + 3600000);
+    eq(r.gained, 0);
+    eq(r.skippedFast, 1);
+    eq(r.state.xp, 0);
+
+    // 建完 3 小时才勾掉 → 算 10 经验 + 1 食物
+    r = WB.petGainFromCompletions(pet, [mk(T0 + 3 * 3600000, T0, false)], T0 + 3 * 3600000);
+    eq(r.gained, 10);
+    eq(r.state.xp, 10);
+    eq(r.state.food, 4);
+    ok(WB.petCountable(mk(T0 + 3 * 3600000, T0, false)), '慢完成的应算数');
+    ok(!WB.petCountable(mk(T0 + 1000, T0, true)), '速通不算数');
+
+    // 老任务没有 createdAt 时也照算
+    eq(WB.petGainFromCompletions(pet, [{ taskId: 'x', at: T0 + 1000 }], T0 + 1000).gained, 10);
+
+    // 每日上限 120：一次塞 20 条，只给到上限并标记 capHit
+    const many = [];
+    for (let i = 0; i < 20; i++) many.push({ taskId: 'm' + i, at: T0 + 4 * 3600000 + i, createdAt: T0 });
+    r = WB.petGainFromCompletions(Object.assign({}, pet, { dayKey: '', dayXp: 0 }), many, T0 + 4 * 3600000);
+    eq(r.gained, 120);
+    eq(r.todayXp, 120);
+    eq(r.capHit, true);
+    eq(r.gained, WB.PET_RULES.dailyXpCap);
+
+    // 跨天自动重置
+    const nextDay = T0 + 30 * 3600000;
+    const r2 = WB.petGainFromCompletions(Object.assign({}, pet, { dayKey: '2020-01-01', dayXp: 120 }), [{ taskId: 'n', at: nextDay, createdAt: T0 }], nextDay);
+    ok(r2.todayXp <= 10, '跨天后今日经验应重新计算：' + r2.todayXp);
+  };
+
   return cases;
 }
 

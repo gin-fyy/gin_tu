@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.5.1';
+  var APP_VERSION = '1.6.0';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -261,12 +261,17 @@
 
   function logCompletion(task) {
     var comps = getCompletions();
+    var now = Date.now();
+    var created = Number(task && task.createdAt) || 0;
     comps.push({
       taskId: task.id,
       title: task.title,
       category: task.category,
       priority: task.priority,
-      at: Date.now()
+      at: now,
+      createdAt: created,
+      // 新建后 2 小时内就勾掉的，算"速通"，不给宠物经验（防止随手建一个立刻勾掉刷经验）
+      fast: !!(created && (now - created) < PET_RULES.minGapMs)
     });
     write(KEY_COMPLETIONS, comps.slice(-2000));
   }
@@ -594,6 +599,8 @@
   var PET_RULES = {
     xpPerTask: 10,            // 完成一个任务 +10 经验
     foodPerTask: 1,           // 完成一个任务 +1 食物
+    dailyXpCap: 120,          // 每天最多拿这么多经验（12 个任务），防止睡前狂勾
+    minGapMs: 2 * 3600 * 1000, // 新建不到 2 小时就完成的，不算数（不给经验/食物）
     hatchXp: 30,              // 30 经验（3 个任务）孵化
     youngXp: 100,             // 幼崽 → 成长期
     adultXp: 300,             // 成长期 → 成熟期
@@ -682,6 +689,9 @@
       diedAt: 0,
       cause: '',
       lifespanDays: PET_RULES.lifespanDays,
+      dailyXpCap: PET_RULES.dailyXpCap,
+      dayKey: '',
+      dayXp: 0,
       lastPlayAt: 0,
       lastTickAt: t
     });
@@ -735,7 +745,50 @@
     return 'baby';
   }
 
-  // 完成任务：加经验、加食物、加心情；经验够了自动孵化
+  // 一条完成记录算不算"有效成长"
+  function petCountable(comp, minGapMs) {
+    if (!comp || !comp.at) return false;
+    var gap = Number(minGapMs) || PET_RULES.minGapMs;
+    var created = Number(comp.createdAt) || 0;
+    if (comp.fast === true) return false;
+    if (created && (Number(comp.at) - created) < gap) return false;
+    return true;
+  }
+
+  /**
+   * 从"新增的完成记录"里结算成长：跳过速通、受每日上限约束。
+   * 返回 { state, gained, skippedFast, capHit, todayXp, cap }
+   */
+  function petGainFromCompletions(state, comps, now) {
+    var s = Object.assign({}, state || {});
+    var t = Number(now) || Date.now();
+    var dayKey = toDateStr(new Date(t));
+    if (s.dayKey !== dayKey) { s.dayKey = dayKey; s.dayXp = 0; }
+    var todayXp = Number(s.dayXp) || 0;
+    var cap = Number(s.dailyXpCap) || PET_RULES.dailyXpCap;
+
+    var gained = 0;
+    var skippedFast = 0;
+    var capHit = false;
+    (comps || []).forEach(function (c) {
+      if (!petCountable(c)) { skippedFast++; return; }
+      var room = cap - todayXp;
+      if (room <= 0) { capHit = true; return; }
+      var one = Math.min(PET_RULES.xpPerTask, room);
+      todayXp += one;
+      gained += one;
+    });
+
+    if (gained > 0) {
+      s.xp = (Number(s.xp) || 0) + gained;
+      s.food = (Number(s.food) || 0) + Math.round(gained / PET_RULES.xpPerTask) * PET_RULES.foodPerTask;
+      s.mood = pct(Number(s.mood) + PET_RULES.moodPerTask * (gained / PET_RULES.xpPerTask));
+      if (!s.hatchedAt && s.xp >= PET_RULES.hatchXp) s.hatchedAt = t;
+    }
+    s.dayKey = dayKey;
+    s.dayXp = todayXp;
+    return { state: s, gained: gained, skippedFast: skippedFast, capHit: capHit, todayXp: todayXp, cap: cap };
+  }
   function petGain(state, tasks, now) {
     var s = Object.assign({}, state || {});
     if (!s.alive) return s;
@@ -822,6 +875,8 @@
       sick: !!s.sick,
       cause: s.cause || '',
       lifespanDays: Number(s.lifespanDays) || PET_RULES.lifespanDays,
+      dailyXpCap: Number(s.dailyXpCap) || PET_RULES.dailyXpCap,
+      todayXp: Number(s.dayXp) || 0,
       canPlay: (t - (Number(s.lastPlayAt) || 0)) >= PET_RULES.playCooldownMs
     };
   }
@@ -1733,6 +1788,8 @@
     petTick: petTick,
     petStage: petStage,
     petGain: petGain,
+    petCountable: petCountable,
+    petGainFromCompletions: petGainFromCompletions,
     petFeed: petFeed,
     petPlay: petPlay,
     petHeal: petHeal,

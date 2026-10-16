@@ -172,7 +172,8 @@ if (!dexEntries.length) {
     ['LocalNotifications（定时通知）', 'com/capacitorjs/plugins/localnotifications/LocalNotificationsPlugin'],
     ['CapacitorUpdater（热更新）', 'ee/forgr/capacitor_updater/CapacitorUpdaterPlugin'],
     ['Browser（打开下载页）', 'com/capacitorjs/plugins/browser/BrowserPlugin'],
-    ['ApkInstaller（应用内更新）', 'com/workbench/apkinstaller/ApkInstallerPlugin']
+    ['ApkInstaller（应用内更新）', 'com/workbench/apkinstaller/ApkInstallerPlugin'],
+    ['FocusLock（专注屏幕固定）', 'com/workbench/focuslock/FocusLockPlugin']
   ];
   wanted.forEach(([label, needle]) => {
     if (dexBlob.indexOf(needle) >= 0) ok('dex 里包含 ' + label + ' 的插件类');

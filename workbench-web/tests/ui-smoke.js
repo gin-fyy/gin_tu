@@ -809,8 +809,10 @@ function injectApkInstaller(w) {
     if (!pet0 || pet0.name !== '小火龙' || pet0.species !== 'dragon') throw new Error('宠物没保存：' + JSON.stringify(pet0));
     if ($(w, '#petStage').textContent.indexOf('蛋') < 0) throw new Error('刚领养时应该是蛋：' + $(w, '#petStage').textContent);
 
-    // 完成 3 个任务 → 孵化
+    // 完成 3 个任务 → 孵化（注意：新建不到 2 小时就勾掉属于"速通"，不给经验，所以先把创建时间往前挪）
+    const backdate = () => w.WB.store.getTasks().forEach((t) => w.WB.store.updateTask(t.id, { createdAt: Date.now() - 3 * 3600 * 1000 }));
     for (let i = 0; i < 3; i++) addQuick(w, '养崽任务' + i);
+    backdate();
     w.WB.store.getTasks().filter((t) => !t.done).forEach((t) => w.WB.store.toggleDone(t.id));
     w.document.dispatchEvent(new w.Event('visibilitychange'));
     await sleep(80);
@@ -833,11 +835,25 @@ function injectApkInstaller(w) {
 
     addQuick(w, '再来一件');
     const freshId = w.WB.store.getTasks().filter((t) => !t.done)[0].id;
+    backdate();
     w.WB.store.toggleDone(freshId);
     w.document.dispatchEvent(new w.Event('visibilitychange'));
     await sleep(40);
     if (w.WB.store.getPet().xp !== 40) throw new Error('新完成的任务应该 +10 经验：' + w.WB.store.getPet().xp);
     if (w.WB.store.getPet().food !== 7) throw new Error('食物也应该 +1（3 见面礼 + 4 个任务 = 7）：' + w.WB.store.getPet().food);
+
+    // 速通不给经验：新建后马上勾掉
+    addQuick(w, '随手建的');
+    const quickId = w.WB.store.getTasks().filter((t) => !t.done)[0].id;
+    const xpBefore = w.WB.store.getPet().xp;
+    w.WB.store.toggleDone(quickId);
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await sleep(40);
+    if (w.WB.store.getPet().xp !== xpBefore) throw new Error('建完不到 2 小时就勾掉不该给经验：' + w.WB.store.getPet().xp);
+    if ($(w, '#petHint').textContent.indexOf('不到 2 小时') < 0) {
+      throw new Error('应该提示有速通不算：' + $(w, '#petHint').textContent);
+    }
+    if ($(w, '#petHint').textContent.indexOf('今日经验') < 0) throw new Error('提示里应有今日经验：' + $(w, '#petHint').textContent);
 
     // 喂食：把饱食压到 10，点喂食应涨回来
     const cur = w.WB.store.getPet();
@@ -859,14 +875,28 @@ function injectApkInstaller(w) {
     if (!q2 || q2 === q1) throw new Error('「换一句」没换：' + q2);
 
     // 番茄钟
-    if ($(w, '#pomoTime').textContent !== '25:00') throw new Error('默认应是 25:00：' + $(w, '#pomoTime').textContent);
+    if ($(w, '#pomoTime').textContent !== '30:00') throw new Error('默认应是 30:00（最短 30 分钟）：' + $(w, '#pomoTime').textContent);
     click(w, $(w, '.pomo-min[data-pomo="45"]'));
     if ($(w, '#pomoTime').textContent !== '45:00') throw new Error('选 45 分后应显示 45:00：' + $(w, '#pomoTime').textContent);
     click(w, $(w, '#pomoStart'));
     if ($(w, '#pomoStart').textContent !== '暂停') throw new Error('开始后按钮应变成暂停');
     if ($(w, '#pomoState').textContent.indexOf('专注中') < 0) throw new Error('状态应显示专注中：' + $(w, '#pomoState').textContent);
     if (w.WB.store.getPomo().running !== true) throw new Error('番茄钟状态没存下来');
+
+    // 全屏专注锁：开始后出现，倒计时同步，放弃要二次确认
+    if ($(w, '#focusLock').hidden) throw new Error('开始专注后应显示全屏专注页');
+    if ($(w, '#focusTime').textContent !== '45:00') throw new Error('专注页倒计时应同步：' + $(w, '#focusTime').textContent);
+    click(w, $(w, '#focusGiveUp'));
+    if ($(w, '#focusLock').hidden) throw new Error('第一次点放弃不该直接退出（防手滑）');
+    if ($(w, '#focusGiveUp').textContent.indexOf('再点一次') < 0) throw new Error('应要求二次确认：' + $(w, '#focusGiveUp').textContent);
+    click(w, $(w, '#focusGiveUp'));
+    if (!$(w, '#focusLock').hidden) throw new Error('二次确认后应关掉专注页');
+    if (w.WB.store.getPomo().running !== false) throw new Error('放弃后番茄钟应停下');
+
+    click(w, $(w, '#pomoStart'));   // 再开一次，测暂停会收起专注页
+    if ($(w, '#focusLock').hidden) throw new Error('重新开始应再次显示专注页');
     click(w, $(w, '#pomoStart'));   // 暂停
+    if (!$(w, '#focusLock').hidden) throw new Error('暂停后应收起专注页');
     if ($(w, '#pomoStart').textContent !== '继续') throw new Error('暂停后按钮应变成继续');
     click(w, $(w, '#pomoReset'));
     if ($(w, '#pomoTime').textContent !== '45:00') throw new Error('重置后应回到所选时长：' + $(w, '#pomoTime').textContent);

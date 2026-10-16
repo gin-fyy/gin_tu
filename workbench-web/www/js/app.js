@@ -1474,13 +1474,21 @@
       return;
     }
 
-    // 同步完成数（用"历史最高"计数：撤销完成不会扣经验，但重复勾选同一件事也刷不到经验）
-    var total = S.getCompletions().length;
+    // 结算新增的完成记录：① 建了不到 2 小时就勾掉的"速通"不算 ② 受每日经验上限约束
+    // ③ 用"历史最高完成数"记账 —— 撤销不扣、重复勾选也不再发
+    var dayKey = D.todayStr();
+    if (st.dayKey !== dayKey) { st.dayKey = dayKey; st.dayXp = 0; }
+    var comps = S.getCompletions();
+    var total = comps.length;
     var mark = Number(st.lastCount) || 0;
+    var settle = null;
     if (total > mark) {
-      st = window.WB.petGain(st, total - mark, Date.now());
+      settle = window.WB.petGainFromCompletions(st, comps.slice(mark), Date.now());
+      st = settle.state;
       st.lastCount = total;
     }
+    var todayXp = settle ? settle.todayXp : (Number(st.dayXp) || 0);
+    var cap = settle ? settle.cap : (Number(st.dailyXpCap) || window.WB.PET_RULES.dailyXpCap);
     var wasAlive = st.alive;
     st = window.WB.petTick(st, Date.now());
     if (wasAlive && !st.alive) {
@@ -1511,6 +1519,9 @@
         (snap.nextXp ? ('（再 ' + Math.max(0, snap.nextXp - snap.xp) + ' 进化）') : '') +
         ' · 寿命约 ' + snap.lifespanDays + ' 天';
     }
+    hint += ' · 今日经验 ' + Math.round(todayXp) + '/' + cap;
+    if (settle && settle.skippedFast) hint += '（有 ' + settle.skippedFast + ' 个建完不到 2 小时就勾掉的，不算）';
+    if (settle && settle.capHit) hint += ' · 今日经验已满，明天再来 💤';
     if (snap.sick) hint += ' · 生病了，快治疗 💊';
     else if (snap.fullness <= 25) hint += ' · 饿了，喂点东西吧 🍖';
     else if (snap.mood <= 25) hint += ' · 有点不开心，陪它玩会儿 ✨';
@@ -1538,15 +1549,24 @@
   }
 
   /* ---------- 番茄钟 ---------- */
+  var FocusLock = (function () {
+    try {
+      var C = window.Capacitor;
+      return (C && C.Plugins && C.Plugins.FocusLock) ? C.Plugins.FocusLock : null;
+    } catch (e) { return null; }
+  })();
+
   var pomo = null;
   var pomoTimer = null;
+  var focusGiveUpArmed = 0;
 
   function savePomoState() { S.savePomo(pomo); }
 
   function loadPomo() {
     var today = D.todayStr();
     var p = S.getPomo() || {};
-    var minutes = Number(p.minutes) || 25;
+    var minutes = Number(p.minutes) || 30;
+    if (minutes < 30) minutes = 30;            // 番茄钟最短 30 分钟
     var st = {
       date: p.date || today,
       count: Number(p.count) || 0,
@@ -1606,6 +1626,7 @@
       pomo.endAt = 0;
       savePomoState();
       cancelPomoNotify();
+      hideFocusLock();
       renderPomo();
       toast('已暂停');
       return;
@@ -1618,6 +1639,7 @@
     schedulePomoNotify();
     renderPomo();
     ensurePomoTick();
+    showFocusLock();        // 全屏专注页 + 请求屏幕固定
     toast('开始专注 ' + Math.ceil(pomoRemainSec() / 60) + ' 分钟');
   }
 
@@ -1629,7 +1651,51 @@
     pomo.remainSec = pomo.minutes * 60;
     savePomoState();
     cancelPomoNotify();
+    hideFocusLock();
     renderPomo();
+  }
+
+  /* ---------- 专注锁屏（番茄钟进行中盖住整个 App） ---------- */
+  function showFocusLock() {
+    var st = S.getPet();
+    $('focusPet').innerHTML = st
+      ? petSvg(st.species, window.WB.petStage(st, Date.now()), { sick: !!st.sick, mood: st.mood })
+      : petSvg('whale', 'baby', {});
+    $('focusTime').textContent = fmtMS(pomoRemainSec());
+    $('focusTip').textContent = '专注中 —— 放下手机，它陪你学完这一段';
+    $('focusSub').textContent = '';
+    $('focusGiveUp').textContent = '放弃这段专注';
+    focusGiveUpArmed = 0;
+    $('focusLock').hidden = false;
+    if (FocusLock && FocusLock.start) {
+      try {
+        FocusLock.start().then(function (r) {
+          if (r && r.note) $('focusSub').textContent = r.note;
+        }).catch(function () { /* ignore */ });
+      } catch (e) { /* ignore */ }
+    } else {
+      $('focusSub').textContent = '（网页版没有屏幕固定，这里只是 App 内专注页）';
+    }
+  }
+
+  function hideFocusLock() {
+    $('focusLock').hidden = true;
+    if (FocusLock && FocusLock.stop) {
+      try { FocusLock.stop().catch(function () {}); } catch (e) { /* ignore */ }
+    }
+  }
+
+  // 放弃要两次点击（防手滑）
+  function giveUpFocus() {
+    var now = Date.now();
+    if (now - focusGiveUpArmed > 6000) {
+      focusGiveUpArmed = now;
+      $('focusGiveUp').textContent = '再点一次确认放弃';
+      $('focusSub').textContent = '放弃的话这一段不算完成，宠物也不会有经验';
+      return;
+    }
+    resetPomo();
+    toast('这一段放弃了，休息一下再来');
   }
 
   // silent=true 表示"App 重开时发现已经到点了"，不弹提示（通知已经响过了）
@@ -1641,6 +1707,7 @@
     pomo.remainSec = pomo.minutes * 60;
     pomo.count = (Number(pomo.count) || 0) + 1;
     savePomoState();
+    hideFocusLock();
     if (!silent && !fromLoad) {
       toast('🍅 一个番茄完成！起来活动一下');
       cancelPomoNotify();
@@ -1663,6 +1730,7 @@
     }
     $('pomoTime').textContent = fmtMS(remain);
     $('pomoState').textContent = '专注中 · 还有 ' + Math.ceil(remain / 60) + ' 分钟';
+    if (!$('focusLock').hidden) $('focusTime').textContent = fmtMS(remain);
   }
 
   function ensurePomoTick() {
@@ -2145,11 +2213,12 @@
     $('quoteNext').addEventListener('click', nextQuote);
     $('pomoStart').addEventListener('click', startPomo);
     $('pomoReset').addEventListener('click', resetPomo);
+    $('focusGiveUp').addEventListener('click', giveUpFocus);
     Array.prototype.forEach.call(document.querySelectorAll('.pomo-min'), function (b) {
       b.addEventListener('click', function () {
         if (!pomo) loadPomo();
         if (pomo.running) { toast('专注中，先暂停再改时长'); return; }
-        pomo.minutes = Number(b.dataset.pomo) || 25;
+        pomo.minutes = Math.max(30, Number(b.dataset.pomo) || 30);   // 最短 30 分钟
         pomo.remainSec = pomo.minutes * 60;
         savePomoState();
         renderPomo();
