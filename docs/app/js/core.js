@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.2.2';
+  var APP_VERSION = '1.3.0';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -362,7 +362,13 @@
         updateBase: DEFAULT_UPDATE_BASE,
         confirmDone: true,
         wallpaper: '',      // '' = 默认背景；预设 id；'custom' = 用自己选的照片
-        wallpaperDim: 30    // 遮罩浓度（0-80，越大文字越清楚）
+        wallpaperDim: 30,   // 遮罩浓度（0-80，越大文字越清楚）
+        termStart: '',      // 学期第一周的周一（空 = 未设置，用于算「第几周」）
+        courseWeekend: true,// 课表是否显示周末两列
+        uiOpacity: 100,     // 界面（卡片）不透明度 %
+        glass: false,       // 液态玻璃效果
+        glassBlur: 18,      // 玻璃模糊强度 px
+        wheelSource: 'custom' // 转盘选项来源：custom | tasks
       },
       read(KEY_SETTINGS, {})
     );
@@ -412,6 +418,254 @@
       id: preset.id,
       url: preset.gradient ? '' : preset.image
     };
+  }
+
+  /* ===================== 课表 ===================== */
+  var KEY_COURSES = 'wb_courses';
+  var KEY_WHEEL = 'wb_wheel';
+
+  var DEFAULT_WHEEL = ['火锅', '麻辣烫', '盖浇饭', '面条', '汉堡', '随便吃点'];
+
+  function getWheelOptions() {
+    var list = read(KEY_WHEEL, null);
+    if (!list || !list.length) return DEFAULT_WHEEL.slice();
+    return list.map(function (s) { return String(s); });
+  }
+
+  function setWheelOptions(list) {
+    var out = (list || []).map(function (s) { return String(s).trim(); }).filter(Boolean).slice(0, 24);
+    write(KEY_WHEEL, out);
+    return out;
+  }
+
+  // 转盘选中哪个：纯函数，方便测试（r 传 [0,1) 的随机数）
+  function wheelPick(n, r) {
+    var count = Math.max(1, Number(n) || 1);
+    var v = (typeof r === 'number' && isFinite(r)) ? r : Math.random();
+    v = v - Math.floor(v);
+    return Math.min(count - 1, Math.floor(v * count));
+  }
+
+  // 默认节次时间（常见大学作息，够用；以后可在设置里改）
+  var DEFAULT_PERIODS = [
+    { no: 1, time: '08:00-08:45' }, { no: 2, time: '08:55-09:40' },
+    { no: 3, time: '10:00-10:45' }, { no: 4, time: '10:55-11:40' },
+    { no: 5, time: '14:00-14:45' }, { no: 6, time: '14:55-15:40' },
+    { no: 7, time: '16:00-16:45' }, { no: 8, time: '16:55-17:40' },
+    { no: 9, time: '19:00-19:45' }, { no: 10, time: '19:55-20:40' },
+    { no: 11, time: '20:50-21:35' }, { no: 12, time: '21:45-22:30' }
+  ];
+  var WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  var COURSE_COLORS = ['#4C6EF5', '#12B886', '#F59F00', '#E8590C', '#AE3EC9', '#1C7ED6', '#E03131', '#0CA678'];
+
+  function getCourses() { return cloneList(read(KEY_COURSES, [])); }
+  function saveCourses(list) { write(KEY_COURSES, list || []); }
+
+  function addCourse(c) {
+    var list = getCourses();
+    var course = Object.assign({
+      id: 'c' + Date.now() + Math.random().toString(36).slice(2, 6),
+      name: '',
+      teacher: '',
+      room: '',
+      weekday: 1,
+      startPeriod: 1,
+      endPeriod: 2,
+      weekFrom: 1,
+      weekTo: 20,
+      parity: 'all',          // all | odd(单周) | even(双周)
+      color: COURSE_COLORS[list.length % COURSE_COLORS.length]
+    }, c || {});
+    list.push(course);
+    saveCourses(list);
+    return course;
+  }
+
+  function updateCourse(id, patch) {
+    var list = getCourses().map(function (c) {
+      return c.id === id ? Object.assign({}, c, patch || {}) : c;
+    });
+    saveCourses(list);
+    return list;
+  }
+
+  function deleteCourse(id) {
+    var list = getCourses().filter(function (c) { return c.id !== id; });
+    saveCourses(list);
+    return list;
+  }
+
+  // 把一个日期归到它所在那一周的周一
+  function mondayOf(dateStr) {
+    var d = parseDate(dateStr || todayStr());
+    var day = d.getDay();                    // 0 = 周日
+    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+    return toDateStr(d);
+  }
+
+  // 某个日期是第几周（学期第一周的周一 = 第 1 周）
+  function weekOf(dateStr, termStart) {
+    if (!dateStr || !termStart) return 1;
+    var start = parseDate(mondayOf(termStart)).getTime();
+    var diff = Math.floor((parseDate(dateStr).getTime() - start) / 86400000);
+    return Math.floor(diff / 7) + 1;
+  }
+
+  // 某周某天有哪些课（考虑起止周与单双周，按节次排序）
+  function coursesOn(courses, weekday, weekNo) {
+    var wk = Number(weekNo) || 1;
+    return (courses || []).filter(function (c) {
+      if (Number(c.weekday) !== Number(weekday)) return false;
+      var from = Number(c.weekFrom) || 1;
+      var to = Number(c.weekTo) || 30;
+      if (wk < from || wk > to) return false;
+      if (c.parity === 'odd' && wk % 2 === 0) return false;
+      if (c.parity === 'even' && wk % 2 === 1) return false;
+      return true;
+    }).sort(function (a, b) {
+      return (Number(a.startPeriod) || 0) - (Number(b.startPeriod) || 0);
+    });
+  }
+
+  // 某天有哪些课
+  function coursesOnDate(courses, dateStr, termStart) {
+    var d = parseDate(dateStr);
+    var wd = d.getDay() === 0 ? 7 : d.getDay();
+    return coursesOn(courses, wd, weekOf(dateStr, termStart));
+  }
+
+  function periodTime(no, periods) {
+    var list = periods && periods.length ? periods : DEFAULT_PERIODS;
+    var hit = null;
+    list.forEach(function (p) { if (Number(p.no) === Number(no)) hit = p; });
+    return hit ? hit.time : '';
+  }
+
+  function periodLabel(c) {
+    var a = Number(c.startPeriod) || 1;
+    var b = Number(c.endPeriod) || a;
+    return a === b ? ('第 ' + a + ' 节') : ('第 ' + a + '-' + b + ' 节');
+  }
+
+  function courseWeeksLabel(c) {
+    var from = Number(c.weekFrom) || 1;
+    var to = Number(c.weekTo) || 30;
+    var tail = c.parity === 'odd' ? '单周' : (c.parity === 'even' ? '双周' : '');
+    return from + '-' + to + ' 周' + (tail ? '（' + tail + '）' : '');
+  }
+
+  /* ---------- 本地规则解析：把粘贴的课表文字变成课程（不需要联网，也不用 AI Key） ---------- */
+  var WD_MAP = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7 };
+
+  function parseCourseLine(line) {
+    var text = String(line || '')
+      .replace(/[，、；;:：]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!text) return null;
+
+    // 先抽「周次范围」：1-16周 / 第1-16周（必须先抽，否则会被后面的节次范围抢走）
+    var weekFrom = null;
+    var weekTo = null;
+    var wr = text.match(/第?\s*(\d{1,2})\s*[-~到至]\s*(\d{1,2})\s*周/);
+    if (wr) {
+      weekFrom = Number(wr[1]);
+      weekTo = Number(wr[2]);
+      text = text.replace(wr[0], ' ');
+    }
+
+    // 单双周
+    var parity = 'all';
+    if (/单双周|每周/.test(text)) {
+      text = text.replace(/单双周|每周/g, ' ');
+    } else if (/双周/.test(text)) {
+      parity = 'even';
+      text = text.replace(/双周/g, ' ');
+    } else if (/单周/.test(text)) {
+      parity = 'odd';
+      text = text.replace(/单周/g, ' ');
+    }
+
+    // 节次：第1-2节 / 1-2节 / 1~2 / 第3节
+    var startPeriod = null;
+    var endPeriod = null;
+    var pr = text.match(/第?\s*(\d{1,2})\s*[-~到至]\s*(\d{1,2})\s*节?/);
+    if (pr) {
+      startPeriod = Number(pr[1]);
+      endPeriod = Number(pr[2]);
+      text = text.replace(pr[0], ' ');
+    } else {
+      var p1 = text.match(/第?\s*(\d{1,2})\s*节/);
+      if (p1) {
+        startPeriod = endPeriod = Number(p1[1]);
+        text = text.replace(p1[0], ' ');
+      }
+    }
+
+    // 星期
+    var weekday = null;
+    var wd = text.match(/(?:周|星期|礼拜)\s*([一二三四五六日天1-7])/);
+    if (wd) {
+      weekday = /[1-7]/.test(wd[1]) ? Number(wd[1]) : WD_MAP[wd[1]];
+      text = text.replace(wd[0], ' ');
+    }
+
+    // 地点：@xxx 或含「楼/室/馆/场/区/教」或 A101 这种编号
+    var room = '';
+    var at = text.match(/@\s*([^\s@]+)/);
+    if (at) {
+      room = at[1];
+      text = text.replace(at[0], ' ');
+    } else {
+      var tokens = text.split(' ').filter(Boolean);
+      for (var i = 0; i < tokens.length; i++) {
+        if (/[楼室馆场区教]|^[A-Za-z]{0,2}\d{3,4}$/.test(tokens[i])) {
+          room = tokens[i];
+          tokens.splice(i, 1);
+          break;
+        }
+      }
+      text = tokens.join(' ');
+    }
+
+    // 教师：老师/教师 后面的词
+    var teacher = '';
+    var tc = text.match(/(?:老师|教师)[:：]?\s*([^\s]+)/);
+    if (tc) {
+      teacher = tc[1];
+      text = text.replace(tc[0], ' ');
+    }
+
+    var name = text.replace(/\s+/g, ' ').trim();
+    if (!name) return null;
+    // 什么信息都没认出来（没星期、没节次、没地点）就当失败，交给用户手改
+    if (weekday === null && startPeriod === null && !room) return null;
+
+    return {
+      name: name,
+      teacher: teacher,
+      room: room,
+      weekday: weekday === null ? 1 : weekday,
+      startPeriod: startPeriod === null ? 1 : startPeriod,
+      endPeriod: endPeriod === null ? (startPeriod === null ? 2 : startPeriod) : endPeriod,
+      weekFrom: weekFrom === null ? 1 : weekFrom,
+      weekTo: weekTo === null ? 20 : weekTo,
+      parity: parity
+    };
+  }
+
+  // 解析整段文字 → { courses: [...], errors: [{ line, text }] }
+  function parseCourseText(text) {
+    var courses = [];
+    var errors = [];
+    String(text || '').split(/\r?\n/).forEach(function (raw, i) {
+      var line = raw.trim();
+      if (!line) return;
+      var c = parseCourseLine(line);
+      if (c) courses.push(c);
+      else errors.push({ line: i + 1, text: line });
+    });
+    return { courses: courses, errors: errors };
   }
 
   function getNotifiedKeys() { return read(KEY_NOTIFIED, []); }
@@ -480,7 +734,9 @@
       categories: KEY_CATEGORIES,
       completions: KEY_COMPLETIONS,
       settings: KEY_SETTINGS,
-      notified: KEY_NOTIFIED
+      notified: KEY_NOTIFIED,
+      courses: KEY_COURSES,
+      wheel: KEY_WHEEL
     },
     getTasks: getTasks,
     saveTasks: saveTasks,
@@ -497,6 +753,13 @@
     saveSettings: saveSettings,
     getWallpaperImage: getWallpaperImage,
     setWallpaperImage: setWallpaperImage,
+    getCourses: getCourses,
+    saveCourses: saveCourses,
+    addCourse: addCourse,
+    updateCourse: updateCourse,
+    deleteCourse: deleteCourse,
+    getWheelOptions: getWheelOptions,
+    setWheelOptions: setWheelOptions,
     getNotifiedKeys: getNotifiedKeys,
     saveNotifiedKeys: saveNotifiedKeys,
     exportData: exportData,
@@ -763,6 +1026,22 @@
     DATA_VERSION: DATA_VERSION,
     WALLPAPERS: WALLPAPERS,
     wallpaperCss: wallpaperCss,
+    DEFAULT_WHEEL: DEFAULT_WHEEL,
+    wheelPick: wheelPick,
+    course: {
+      DEFAULT_PERIODS: DEFAULT_PERIODS,
+      WEEKDAY_LABELS: WEEKDAY_LABELS,
+      COURSE_COLORS: COURSE_COLORS,
+      mondayOf: mondayOf,
+      weekOf: weekOf,
+      coursesOn: coursesOn,
+      coursesOnDate: coursesOnDate,
+      periodTime: periodTime,
+      periodLabel: periodLabel,
+      courseWeeksLabel: courseWeeksLabel,
+      parseCourseLine: parseCourseLine,
+      parseCourseText: parseCourseText
+    },
     storage: storage,
     datetime: datetime,
     store: store,

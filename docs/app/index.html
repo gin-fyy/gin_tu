@@ -65,6 +65,49 @@
       <div id="taskGroups"></div>
     </section>
 
+    <!-- ===================== 课表 ===================== -->
+    <section class="view" id="view-course" hidden>
+      <div class="card">
+        <div class="row" style="justify-content:space-between; align-items:center">
+          <button class="mini-btn ghost" id="cwPrev">◀</button>
+          <div style="text-align:center; flex:1">
+            <div class="s-title" id="cwLabel">本周</div>
+            <div class="tip" id="cwRange"></div>
+          </div>
+          <button class="mini-btn ghost" id="cwNext">▶</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="mini-btn" id="cwToday">回到本周</button>
+          <button class="mini-btn ghost" id="cwWeekend">显示周末</button>
+          <button class="mini-btn ghost" id="cwTermBtn">设置学期首周</button>
+        </div>
+        <div class="row" style="margin-top:10px; align-items:center" id="cwTermRow" hidden>
+          <span class="tip" style="flex:0 0 92px">第 1 周周一</span>
+          <input type="date" id="cwTermStart" />
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">课表</div>
+        <div class="cg-wrap"><div class="cg" id="courseGrid"></div></div>
+        <div class="tip" id="courseHint" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">今天 · <span id="courseTodayLabel">—</span></div>
+        <div id="courseToday"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">添加课程</div>
+        <div class="tip">可以粘贴课表文字自动识别，一行一门，例如：<b>周一 1-2节 高等数学 教三101</b>；也认识「3-4节」「@实验楼B203」「1-16周」「单周 / 双周」。</div>
+        <div class="row" style="margin-top:12px">
+          <button class="mini-btn" id="courseAddBtn">手动添加</button>
+          <button class="mini-btn ghost" id="courseImportBtn">粘贴课表导入</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ===================== 统计 ===================== -->
     <section class="view" id="view-stats" hidden>
       <div class="cards" id="statCards"></div>
@@ -109,6 +152,14 @@
       </div>
 
       <div class="card">
+        <div class="section-head">决定困难？转一下</div>
+        <div class="tip">轮盘可以抽「今天吃什么」，也可以直接抽一个还没做的任务。</div>
+        <div class="row" style="margin-top:12px">
+          <button class="mini-btn" id="openWheelBtn">打开轮盘</button>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="section-head">外观 · 壁纸</div>
         <div class="tip">选一张喜欢的壁纸；卡片会自动半透明，文字照样看得清。自己选的照片会先压缩再存在本机。</div>
         <div class="wp-grid" id="wpGrid" style="margin-top:12px"></div>
@@ -123,6 +174,25 @@
           <span class="tip" id="wpDimVal" style="flex:0 0 42px; text-align:right">30%</span>
         </div>
         <div class="tip" id="wpState" style="margin-top:8px"></div>
+
+        <div style="height:1px;background:var(--border);margin:14px 0"></div>
+        <div class="row" style="align-items:center">
+          <span class="tip" style="flex:0 0 64px">透明度</span>
+          <input type="range" id="opacityRange" min="50" max="100" step="5" />
+          <span class="tip" id="opacityVal" style="flex:0 0 44px; text-align:right">100%</span>
+        </div>
+        <div class="switch-row" style="margin-top:6px">
+          <div class="switch-left">
+            <div class="s-title">液态玻璃效果</div>
+            <div class="s-sub">卡片变磨砂玻璃质感（iOS 26 那种），配合壁纸更好看</div>
+          </div>
+          <input type="checkbox" id="glassSwitch" class="switch" />
+        </div>
+        <div class="row" style="align-items:center">
+          <span class="tip" style="flex:0 0 64px">玻璃</span>
+          <input type="range" id="glassRange" min="0" max="40" step="2" />
+          <span class="tip" id="glassVal" style="flex:0 0 44px; text-align:right">18px</span>
+        </div>
       </div>
 
       <div class="card">
@@ -184,6 +254,13 @@
         <path d="M8.4 12.4l2.6 2.6 4.6-5.6"></path>
       </svg>
       <span>任务</span>
+    </button>
+    <button class="tab" data-view="course">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <rect x="3.5" y="5" width="17" height="15.5" rx="2.5"></rect>
+        <path d="M3.5 9.5h17M8.5 3.5v3M15.5 3.5v3M8 13h2.5M13.5 13H16M8 16.5h2.5M13.5 16.5H16"></path>
+      </svg>
+      <span>课表</span>
     </button>
     <button class="tab" data-view="stats">
       <svg viewBox="0 0 24 24" fill="currentColor">
@@ -280,6 +357,108 @@
     </div>
     <div class="sheet-foot">
       <button class="btn-primary" id="importDo">确认导入（覆盖当前数据）</button>
+    </div>
+  </div>
+
+  <!-- ===================== 课程编辑 ===================== -->
+  <div class="sheet" id="sheetCourse" hidden>
+    <div class="sheet-head">
+      <span id="courseSheetTitle">添加课程</span>
+      <button class="sheet-close" id="courseClose">✕</button>
+    </div>
+    <div class="sheet-body">
+      <label class="field">
+        <span class="field-label">课程名</span>
+        <input id="cName" placeholder="例如：高等数学" />
+      </label>
+      <div class="field">
+        <span class="field-label">星期</span>
+        <div class="opt-wrap" id="cWeekdays"></div>
+      </div>
+      <div class="field">
+        <span class="field-label">节次</span>
+        <div class="pick-row">
+          <input type="number" id="cStart" min="1" max="12" value="1" />
+          <span class="tip">至</span>
+          <input type="number" id="cEnd" min="1" max="12" value="2" />
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">周次</span>
+        <div class="pick-row">
+          <input type="number" id="cWeekFrom" min="1" max="30" value="1" />
+          <span class="tip">至</span>
+          <input type="number" id="cWeekTo" min="1" max="30" value="20" />
+          <select id="cParity">
+            <option value="all">每周</option>
+            <option value="odd">单周</option>
+            <option value="even">双周</option>
+          </select>
+        </div>
+      </div>
+      <label class="field">
+        <span class="field-label">地点</span>
+        <input id="cRoom" placeholder="例如：教三101" />
+      </label>
+      <label class="field">
+        <span class="field-label">教师</span>
+        <input id="cTeacher" placeholder="可选" />
+      </label>
+      <div class="field">
+        <span class="field-label">颜色</span>
+        <div class="opt-wrap" id="cColors"></div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn-primary" id="cSave">保存课程</button>
+      <button class="btn-danger" id="cDelete" hidden>删除课程</button>
+    </div>
+  </div>
+
+  <!-- ===================== 粘贴课表导入 ===================== -->
+  <div class="sheet" id="sheetCourseImport" hidden>
+    <div class="sheet-head">
+      <span>粘贴课表导入</span>
+      <button class="sheet-close" id="ciClose">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="tip">一行一门课：<b>周几 + 节次 + 课程名</b>（地点、周次、单双周可选）。识别不了的行会单独列出来，你手改一下即可。</div>
+      <textarea id="ciText" rows="8" placeholder="周一 1-2节 高等数学 教三101&#10;周二 3-4节 大学物理 @实验楼B203&#10;周三 5-6节 英语 外语楼302 1-16周"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="mini-btn" id="ciParse">解析看看</button>
+      </div>
+      <div id="ciPreview" style="margin-top:12px"></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn-primary" id="ciDo" disabled>导入</button>
+    </div>
+  </div>
+
+  <!-- ===================== 轮盘 ===================== -->
+  <div class="sheet" id="sheetWheel" hidden>
+    <div class="sheet-head">
+      <span>轮盘</span>
+      <button class="sheet-close" id="wheelClose">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="wheel-wrap"><canvas id="wheelCanvas"></canvas></div>
+      <div class="tip" id="wheelResult" style="text-align:center; margin-top:8px"></div>
+      <button class="btn-primary" id="wheelSpin" style="margin-top:12px">转一下</button>
+      <div class="field" style="margin-top:14px">
+        <span class="field-label">选项来源</span>
+        <select id="wheelSource">
+          <option value="custom">自己填的选项</option>
+          <option value="tasks">从「未完成的任务」里抽</option>
+        </select>
+      </div>
+      <label class="field">
+        <span class="field-label">选项（一行一个，最多 24 个）</span>
+        <textarea id="wheelOptions" rows="6" placeholder="火锅&#10;麻辣烫&#10;盖浇饭"></textarea>
+      </label>
+      <div class="row" style="margin-top:8px">
+        <button class="mini-btn" id="wheelSaveOpts">保存选项</button>
+        <button class="mini-btn ghost" id="wheelResetOpts">恢复默认</button>
+      </div>
     </div>
   </div>
 </div>

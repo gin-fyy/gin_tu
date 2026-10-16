@@ -728,14 +728,360 @@
     renderTop();
     renderHome();
     renderTasks();
+    renderCourse();
     renderStats();
     renderMine();
+    applyAppearance();
+  }
+
+  /* ===================== 课表 ===================== */
+  var C = window.WB.course;
+  var cwOffset = 0;             // 相对「本周」的偏移（周）
+  var courseEditingId = null;
+  var coursePickColor = null;
+  var importPreview = null;
+
+  function shortTime(t) { return String(t || '').split('-')[0] || ''; }
+  function fmtMD(dateStr) {
+    var d = D.parseDate(dateStr);
+    return (d.getMonth() + 1) + '/' + d.getDate();
+  }
+
+  function courseWeekInfo() {
+    var s = S.getSettings();
+    var monday = D.addDays(C.mondayOf(D.todayStr()), cwOffset * 7);
+    var termStart = s.termStart || '';
+    var weekNo = termStart ? C.weekOf(monday, termStart) : (cwOffset + 1);
+    return { monday: monday, sunday: D.addDays(monday, 6), weekNo: weekNo, termStart: termStart };
+  }
+
+  function renderCourse() {
+    var s = S.getSettings();
+    var info = courseWeekInfo();
+    var courses = S.getCourses();
+    var weekend = s.courseWeekend !== false;
+    var days = weekend ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5];
+
+    var maxPeriod = 8;
+    courses.forEach(function (c) { maxPeriod = Math.max(maxPeriod, Number(c.endPeriod) || 0); });
+    maxPeriod = Math.min(12, maxPeriod);
+
+    var todayWd = D.parseDate(D.todayStr()).getDay();
+    todayWd = todayWd === 0 ? 7 : todayWd;
+
+    var html = ['<div class="cg-corner"></div>'];
+    days.forEach(function (d) {
+      html.push('<div class="cg-day' + (d === todayWd && cwOffset === 0 ? ' today' : '') + '">' + C.WEEKDAY_LABELS[d - 1] + '</div>');
+    });
+    for (var p = 1; p <= maxPeriod; p++) {
+      html.push('<div class="cg-period" style="grid-row:' + (p + 1) + '; grid-column:1"><b>' + p + '</b><span>' + shortTime(C.periodTime(p)) + '</span></div>');
+      days.forEach(function (d, di) {
+        html.push('<div class="cg-empty" style="grid-row:' + (p + 1) + '; grid-column:' + (di + 2) + '"></div>');
+      });
+    }
+    courses.forEach(function (c) {
+      var di = days.indexOf(Number(c.weekday));
+      if (di < 0) return;
+      if (!C.coursesOn([c], c.weekday, info.weekNo).length) return;   // 这一周不上
+      var sp = Math.max(1, Number(c.startPeriod) || 1);
+      if (sp > maxPeriod) return;
+      var ep = Math.min(maxPeriod, Math.max(sp, Number(c.endPeriod) || sp));
+      var span = ep - sp + 1;
+      html.push('<div class="cg-course" data-course="' + esc(c.id) + '" style="grid-row:' + (sp + 1) + ' / span ' + span +
+        '; grid-column:' + (di + 2) + '; background:' + esc(c.color || '#4C6EF5') + '">' +
+        '<b>' + esc(c.name) + '</b>' + (c.room ? '<span>' + esc(c.room) + '</span>' : '') + '</div>');
+    });
+
+    var grid = $('courseGrid');
+    grid.className = 'cg' + (weekend ? '' : ' no-weekend');
+    grid.innerHTML = html.join('');
+
+    $('cwLabel').textContent = info.termStart
+      ? ('第 ' + info.weekNo + ' 周')
+      : (cwOffset === 0 ? '本周' : (cwOffset > 0 ? cwOffset + ' 周后' : (-cwOffset) + ' 周前'));
+    $('cwRange').textContent = fmtMD(info.monday) + ' - ' + fmtMD(info.sunday);
+    $('cwTermStart').value = info.termStart || '';
+    $('cwWeekend').textContent = weekend ? '隐藏周末' : '显示周末';
+    $('courseHint').textContent = info.termStart
+      ? '学期首周：' + info.termStart + '（单双周按周次准确判断）'
+      : '还没设「学期首周」，单双周暂时按当前这周 = 第 1 周算；点上面按钮填一下更准。';
+
+    var today = D.todayStr();
+    var todays = C.coursesOnDate(courses, today, info.termStart);
+    $('courseTodayLabel').textContent = D.dateLabel(today) + ' ' + C.WEEKDAY_LABELS[(D.parseDate(today).getDay() + 6) % 7];
+    $('courseToday').innerHTML = todays.length
+      ? todays.map(function (c) {
+          return '<div class="course-item" data-course="' + esc(c.id) + '">' +
+            '<span class="ci-color" style="background:' + esc(c.color || '#4C6EF5') + '"></span>' +
+            '<div class="ci-main">' +
+              '<div class="ci-name">' + esc(c.name) + '</div>' +
+              '<div class="tip">' + C.periodLabel(c) + ' · ' + esc(C.periodTime(c.startPeriod)) +
+                (c.room ? ' · ' + esc(c.room) : '') + (c.teacher ? ' · ' + esc(c.teacher) : '') + '</div>' +
+            '</div>' +
+          '</div>';
+        }).join('')
+      : '<div class="tip">今天没有课 🎉</div>';
+  }
+
+  function fillCourseWeekdays(sel) {
+    $('cWeekdays').innerHTML = C.WEEKDAY_LABELS.map(function (n, i) {
+      return '<button class="opt' + (i + 1 === Number(sel) ? ' on' : '') + '" data-act="pickWeekday" data-v="' + (i + 1) + '">' + n + '</button>';
+    }).join('');
+  }
+
+  function fillCourseColors(sel) {
+    $('cColors').innerHTML = C.COURSE_COLORS.map(function (c) {
+      return '<button class="swatch' + (c === sel ? ' on' : '') + '" data-act="pickColor" data-v="' + c + '" style="background:' + c + '"></button>';
+    }).join('');
+  }
+
+  function currentCourseWeekday() {
+    var on = $('cWeekdays').querySelector('.opt.on');
+    return on ? Number(on.dataset.v) : 1;
+  }
+
+  function openCourseSheet(id, preset) {
+    var c = null;
+    if (id) c = S.getCourses().filter(function (x) { return x.id === id; })[0] || null;
+    courseEditingId = c ? c.id : null;
+    var data = c || Object.assign({
+      name: '', teacher: '', room: '', weekday: 1, startPeriod: 1, endPeriod: 2,
+      weekFrom: 1, weekTo: 20, parity: 'all'
+    }, preset || {});
+
+    $('courseSheetTitle').textContent = c ? '编辑课程' : '添加课程';
+    $('cName').value = data.name || '';
+    $('cRoom').value = data.room || '';
+    $('cTeacher').value = data.teacher || '';
+    $('cStart').value = String(data.startPeriod || 1);
+    $('cEnd').value = String(data.endPeriod || 2);
+    $('cWeekFrom').value = String(data.weekFrom || 1);
+    $('cWeekTo').value = String(data.weekTo || 20);
+    $('cParity').value = data.parity || 'all';
+    coursePickColor = data.color || C.COURSE_COLORS[0];
+    fillCourseWeekdays(data.weekday || 1);
+    fillCourseColors(coursePickColor);
+    $('cDelete').hidden = !c;
+    $('cSave').textContent = c ? '保存修改' : '添加课程';
+    openSheet('course');
+  }
+
+  function saveCourseForm() {
+    var name = ($('cName').value || '').trim();
+    if (!name) { toast('先写课程名'); return; }
+    var sp = Math.max(1, Math.min(12, Number($('cStart').value) || 1));
+    var ep = Math.max(sp, Math.min(12, Number($('cEnd').value) || sp));
+    var patch = {
+      name: name,
+      room: ($('cRoom').value || '').trim(),
+      teacher: ($('cTeacher').value || '').trim(),
+      weekday: currentCourseWeekday(),
+      startPeriod: sp,
+      endPeriod: ep,
+      weekFrom: Math.max(1, Number($('cWeekFrom').value) || 1),
+      weekTo: Math.max(1, Number($('cWeekTo').value) || 20),
+      parity: $('cParity').value || 'all',
+      color: coursePickColor || C.COURSE_COLORS[0]
+    };
+    if (courseEditingId) { S.updateCourse(courseEditingId, patch); toast('已保存'); }
+    else { S.addCourse(patch); toast('已添加课程'); }
+    closeSheet();
+    renderCourse();
+  }
+
+  function deleteCourseEditing() {
+    if (!courseEditingId) return;
+    if (!window.confirm('删除这门课？')) return;
+    S.deleteCourse(courseEditingId);
+    closeSheet();
+    renderCourse();
+    toast('已删除');
+  }
+
+  function openCourseImport() {
+    importPreview = null;
+    $('ciText').value = '';
+    $('ciPreview').innerHTML = '';
+    $('ciDo').disabled = true;
+    $('ciDo').textContent = '导入';
+    openSheet('courseImport');
+  }
+
+  function parseImportText() {
+    var r = C.parseCourseText($('ciText').value || '');
+    importPreview = r;
+    var html = '';
+    if (r.courses.length) {
+      html += '<div class="tip">识别到 ' + r.courses.length + ' 门课：</div>';
+      html += r.courses.map(function (c) {
+        return '<div class="ci-preview">' + C.WEEKDAY_LABELS[c.weekday - 1] + ' ' + C.periodLabel(c) + ' · ' + esc(c.name) +
+          (c.room ? ' · ' + esc(c.room) : '') + ' · ' + C.courseWeeksLabel(c) + '</div>';
+      }).join('');
+    }
+    if (r.errors.length) {
+      html += '<div class="tip" style="margin-top:10px">有 ' + r.errors.length + ' 行没认出来（可以改改再解析，或手动添加）：</div>';
+      html += r.errors.map(function (e) {
+        return '<div class="ci-error">第 ' + e.line + ' 行：' + esc(e.text) + '</div>';
+      }).join('');
+    }
+    if (!r.courses.length && !r.errors.length) html = '<div class="tip">还没输入内容。</div>';
+    $('ciPreview').innerHTML = html;
+    $('ciDo').disabled = !r.courses.length;
+    $('ciDo').textContent = r.courses.length ? ('导入这 ' + r.courses.length + ' 门课') : '导入';
+  }
+
+  function doCourseImport() {
+    if (!importPreview || !importPreview.courses.length) return;
+    importPreview.courses.forEach(function (c) { S.addCourse(c); });
+    toast('已导入 ' + importPreview.courses.length + ' 门课');
+    closeSheet();
+    renderCourse();
+  }
+
+  /* ===================== 外观：透明度 + 液态玻璃 ===================== */
+  function applyAppearance() {
+    var s = S.getSettings();
+    var op = Number(s.uiOpacity);
+    if (!isFinite(op)) op = 100;
+    op = Math.max(40, Math.min(100, op));
+    var blur = Number(s.glassBlur);
+    if (!isFinite(blur)) blur = 18;
+    blur = Math.max(0, Math.min(40, blur));
+
+    var root = document.documentElement;
+    root.style.setProperty('--card-alpha', (op / 100).toFixed(3));
+    root.style.setProperty('--glass-blur', blur + 'px');
+    if (s.glass) document.body.classList.add('wb-glass');
+    else document.body.classList.remove('wb-glass');
+
+    if ($('opacityRange')) $('opacityRange').value = String(op);
+    if ($('opacityVal')) $('opacityVal').textContent = op + '%';
+    if ($('glassRange')) $('glassRange').value = String(blur);
+    if ($('glassVal')) $('glassVal').textContent = blur + 'px';
+    if ($('glassSwitch')) $('glassSwitch').checked = !!s.glass;
+  }
+
+  /* ===================== 轮盘 ===================== */
+  var WHEEL_COLORS = ['#4C6EF5', '#12B886', '#F59E0B', '#E8590C', '#AE3EC9', '#1C7ED6', '#E03131', '#0CA678', '#7C5CFF', '#F06595'];
+  var wheelRot = -Math.PI / 2;
+  var wheelSpinning = false;
+
+  function wheelItems() {
+    if (S.getSettings().wheelSource === 'tasks') {
+      var list = S.getTasks().filter(function (t) { return !t.done; }).map(function (t) { return t.title; });
+      return list.length ? list : ['（暂无未完成任务）'];
+    }
+    var opts = S.getWheelOptions();
+    return opts.length ? opts : window.WB.DEFAULT_WHEEL.slice();
+  }
+
+  function drawWheel(rot) {
+    var cv = $('wheelCanvas');
+    if (!cv) return;
+    var items = wheelItems();
+    var size = Math.min(300, Math.max(200, cv.clientWidth || 260));
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(size * dpr);
+    cv.height = Math.round(size * dpr);
+    cv.style.height = size + 'px';
+    var ctx = null;
+    try { ctx = cv.getContext && cv.getContext('2d'); } catch (e) { ctx = null; }
+    if (!ctx) return;          // 环境不支持 canvas 也不影响抽签逻辑
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+    var cx = size / 2;
+    var cy = size / 2;
+    var r = size / 2 - 10;
+    var n = items.length;
+    var step = Math.PI * 2 / n;
+
+    for (var i = 0; i < n; i++) {
+      var a0 = rot + i * step;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, a0, a0 + step);
+      ctx.closePath();
+      ctx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
+      ctx.fill();
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(a0 + step / 2);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.font = '600 ' + (n > 8 ? 11 : 13) + 'px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+      var label = String(items[i]);
+      var maxLen = n > 8 ? 7 : 9;
+      if (label.length > maxLen) label = label.slice(0, maxLen) + '…';
+      ctx.fillText(label, r - 10, 0);
+      ctx.restore();
+    }
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 24, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
+    ctx.fill();
+    ctx.fillStyle = '#2A3040';
+    ctx.font = '700 12px -apple-system,"PingFang SC",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('转', cx, cy);
+
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, 2);
+    ctx.lineTo(cx + 10, 2);
+    ctx.lineTo(cx, 24);
+    ctx.closePath();
+    ctx.fillStyle = '#E03131';
+    ctx.fill();
+  }
+
+  function openWheelSheet() {
+    var s = S.getSettings();
+    $('wheelSource').value = s.wheelSource || 'custom';
+    $('wheelOptions').value = S.getWheelOptions().join('\n');
+    $('wheelResult').textContent = '';
+    openSheet('wheel');
+    drawWheel(wheelRot);
+  }
+
+  function spinWheel() {
+    if (wheelSpinning) return;
+    var items = wheelItems();
+    if (items.length < 2) { toast('至少要有两个选项'); return; }
+    wheelSpinning = true;
+    $('wheelResult').textContent = '转起来了…';
+
+    var idx = window.WB.wheelPick(items.length, Math.random());
+    var step = Math.PI * 2 / items.length;
+    var turns = 4 + Math.floor(Math.random() * 3);
+    var start = wheelRot;
+    var target = -Math.PI / 2 - (idx + 0.5) * step - turns * Math.PI * 2;
+    var delta = target - start;
+    var dur = 2600;
+    var t0 = Date.now();
+
+    function frame() {
+      var p = Math.min(1, (Date.now() - t0) / dur);
+      var e = 1 - Math.pow(1 - p, 3);
+      wheelRot = start + delta * e;
+      drawWheel(wheelRot);
+      if (p < 1) {
+        window.requestAnimationFrame(frame);
+      } else {
+        wheelSpinning = false;
+        $('wheelResult').textContent = '结果：' + items[idx];
+        toast('🎯 ' + items[idx]);
+      }
+    }
+    window.requestAnimationFrame(frame);
   }
 
   /* ===================== 视图切换 ===================== */
   function showView(name) {
     state.view = name;
-    ['home', 'tasks', 'stats', 'mine'].forEach(function (v) {
+    ['home', 'tasks', 'course', 'stats', 'mine'].forEach(function (v) {
       $('view-' + v).hidden = (v !== name);
     });
     Array.prototype.forEach.call($('tabbar').children, function (btn) {
@@ -753,6 +1099,9 @@
     $('sheetMask').hidden = false;
     $('sheetTask').hidden = (which !== 'task');
     $('sheetImport').hidden = (which !== 'import');
+    $('sheetCourse').hidden = (which !== 'course');
+    $('sheetCourseImport').hidden = (which !== 'courseImport');
+    $('sheetWheel').hidden = (which !== 'wheel');
     // 让安卓返回键 / 浏览器后退先关掉弹层，而不是直接退出应用
     if (!sheetPushed) {
       try {
@@ -766,6 +1115,9 @@
     $('sheetMask').hidden = true;
     $('sheetTask').hidden = true;
     $('sheetImport').hidden = true;
+    $('sheetCourse').hidden = true;
+    $('sheetCourseImport').hidden = true;
+    $('sheetWheel').hidden = true;
     if (sheetPushed) {
       sheetPushed = false;
       if (!fromPop) {
@@ -966,7 +1318,10 @@
     });
 
     // 固定按钮
-    $('fabNew').addEventListener('click', function () { openTaskSheet(null); });
+    $('fabNew').addEventListener('click', function () {
+      if (state.view === 'course') { openCourseSheet(null); return; }
+      openTaskSheet(null);
+    });
     $('quickAdd').addEventListener('click', quickAdd);
     $('quickInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') quickAdd(); });
     $('sheetClose').addEventListener('click', closeSheet);
@@ -1054,6 +1409,84 @@
     $('wpDim').addEventListener('input', function (e) {
       S.saveSettings({ wallpaperDim: Number(e.target.value) || 0 });
       applyWallpaper();
+    });
+
+    // 课表
+    $('cwPrev').addEventListener('click', function () { cwOffset -= 1; renderCourse(); });
+    $('cwNext').addEventListener('click', function () { cwOffset += 1; renderCourse(); });
+    $('cwToday').addEventListener('click', function () { cwOffset = 0; renderCourse(); });
+    $('cwWeekend').addEventListener('click', function () {
+      S.saveSettings({ courseWeekend: S.getSettings().courseWeekend === false });
+      renderCourse();
+    });
+    $('cwTermBtn').addEventListener('click', function () { $('cwTermRow').hidden = !$('cwTermRow').hidden; });
+    $('cwTermStart').addEventListener('change', function (e) {
+      S.saveSettings({ termStart: e.target.value || '' });
+      renderCourse();
+      toast(e.target.value ? '学期首周已设置' : '已清除学期首周');
+    });
+    $('courseAddBtn').addEventListener('click', function () { openCourseSheet(null); });
+    $('courseImportBtn').addEventListener('click', openCourseImport);
+    $('courseGrid').addEventListener('click', function (e) {
+      var el = e.target && e.target.closest ? e.target.closest('[data-course]') : null;
+      if (el) openCourseSheet(el.getAttribute('data-course'));
+    });
+    $('courseToday').addEventListener('click', function (e) {
+      var el = e.target && e.target.closest ? e.target.closest('[data-course]') : null;
+      if (el) openCourseSheet(el.getAttribute('data-course'));
+    });
+    $('courseClose').addEventListener('click', function () { closeSheet(); });
+    $('cSave').addEventListener('click', saveCourseForm);
+    $('cDelete').addEventListener('click', deleteCourseEditing);
+    $('cWeekdays').addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('[data-act="pickWeekday"]') : null;
+      if (!b) return;
+      Array.prototype.forEach.call($('cWeekdays').children, function (x) { x.className = 'opt'; });
+      b.className = 'opt on';
+    });
+    $('cColors').addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('[data-act="pickColor"]') : null;
+      if (!b) return;
+      coursePickColor = b.getAttribute('data-v');
+      fillCourseColors(coursePickColor);
+    });
+    $('ciClose').addEventListener('click', function () { closeSheet(); });
+    $('ciParse').addEventListener('click', parseImportText);
+    $('ciDo').addEventListener('click', doCourseImport);
+
+    // 外观
+    $('opacityRange').addEventListener('input', function (e) {
+      S.saveSettings({ uiOpacity: Number(e.target.value) || 100 });
+      applyAppearance();
+    });
+    $('glassSwitch').addEventListener('change', function (e) {
+      S.saveSettings({ glass: !!e.target.checked });
+      applyAppearance();
+    });
+    $('glassRange').addEventListener('input', function (e) {
+      S.saveSettings({ glassBlur: Number(e.target.value) || 0 });
+      applyAppearance();
+    });
+
+    // 轮盘
+    $('openWheelBtn').addEventListener('click', openWheelSheet);
+    $('wheelClose').addEventListener('click', function () { closeSheet(); });
+    $('wheelSpin').addEventListener('click', spinWheel);
+    $('wheelSource').addEventListener('change', function (e) {
+      S.saveSettings({ wheelSource: e.target.value });
+      $('wheelResult').textContent = '';
+      drawWheel(wheelRot);
+    });
+    $('wheelSaveOpts').addEventListener('click', function () {
+      S.setWheelOptions(($('wheelOptions').value || '').split(/\r?\n/));
+      toast('选项已保存（' + S.getWheelOptions().length + ' 个）');
+      drawWheel(wheelRot);
+    });
+    $('wheelResetOpts').addEventListener('click', function () {
+      S.setWheelOptions(window.WB.DEFAULT_WHEEL.slice());
+      $('wheelOptions').value = S.getWheelOptions().join('\n');
+      drawWheel(wheelRot);
+      toast('已恢复默认选项');
     });
 
     $('checkUpdateBtn').addEventListener('click', checkApkUpdate);

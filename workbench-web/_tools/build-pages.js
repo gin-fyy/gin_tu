@@ -27,6 +27,34 @@ const DOCS = outArg > -1 && process.argv[outArg + 1]
 function rmrf(p) {
   fs.rmSync(p, { recursive: true, force: true });
 }
+
+// Windows 上如果目标文件带「只读」属性（例如从只读目录拷过来的图片），
+// copyFileSync 覆盖时会报 EPERM。这里统一先清只读位，必要时删掉再拷。
+function forceCopy(s, d) {
+  try {
+    if (fs.existsSync(d)) fs.chmodSync(d, 0o666);
+    fs.copyFileSync(s, d);
+  } catch (e) {
+    if (e.code === 'EPERM' || e.code === 'EACCES') {
+      fs.rmSync(d, { force: true, recursive: true });
+      fs.copyFileSync(s, d);
+      return;
+    }
+    throw e;
+  }
+}
+
+// 顺手清掉源目录里的只读位，避免下次又踩同一个坑
+function clearReadonly(dir) {
+  try {
+    fs.readdirSync(dir, { withFileTypes: true }).forEach((e) => {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) clearReadonly(p);
+      else { try { fs.chmodSync(p, 0o666); } catch (err) { /* ignore */ } }
+    });
+  } catch (err) { /* ignore */ }
+}
+
 function copyDir(src, dst) {
   fs.mkdirSync(dst, { recursive: true });
   fs.readdirSync(src, { withFileTypes: true }).forEach((e) => {
@@ -34,13 +62,15 @@ function copyDir(src, dst) {
     const s = path.join(src, e.name);
     const d = path.join(dst, e.name);
     if (e.isDirectory()) copyDir(s, d);
-    else fs.copyFileSync(s, d);
+    else forceCopy(s, d);
   });
 }
 function copyFile(src, dst) {
   fs.mkdirSync(path.dirname(dst), { recursive: true });
-  fs.copyFileSync(src, dst);
+  forceCopy(src, dst);
 }
+
+clearReadonly(WWW);
 
 /* 网页版 */
 copyDir(WWW, path.join(DOCS, 'app'));
