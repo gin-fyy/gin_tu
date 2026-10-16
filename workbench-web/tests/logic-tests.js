@@ -669,6 +669,17 @@ function makeCases(mode) {
     eq(pe.room, '操场');
     eq(pe.weekTo, 8);
     eq(pe.parity, 'even');
+
+    // 单周写法：第5周 / 5周（正方课表常见）
+    const one = WB.course.parseCourseText('周六 1-2节 高等数学A(一) @工训三区A417 第5周\n周五 6-7节 大学体育(一) 5周');
+    eq(one.courses.length, 2);
+    eq(one.courses[0].weekFrom, 5);
+    eq(one.courses[0].weekTo, 5);
+    eq(one.courses[0].weekday, 6);
+    eq(one.courses[0].room, '工训三区A417');
+    eq(one.courses[1].weekFrom, 5);
+    eq(one.courses[1].weekTo, 5);
+    eq(one.courses[1].name, '大学体育(一)');
   };
 
   cases['课表: 周次计算与某天的课'] = (WB) => {

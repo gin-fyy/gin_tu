@@ -1004,6 +1004,7 @@
       model: (s.aiModel || window.WB.AI_DEFAULT_MODEL).trim(),
       temperature: 0.1,
       stream: false,
+      max_tokens: 4096,        // 课表长，输出容易被截断 → 给足长度，否则 JSON 会缺半截
       messages: [{
         role: 'user',
         content: [

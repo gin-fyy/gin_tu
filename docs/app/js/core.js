@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.3.3';
+  var APP_VERSION = '1.3.4';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -431,13 +431,14 @@
   var AI_DEFAULT_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
   var AI_DEFAULT_MODEL = 'glm-4v-flash';
   var AI_PROMPT = [
-    '你是课表识别助手。请逐行逐列扫描这张课表的每一个格子，不要遗漏任何一门课（很容易漏掉某些格子，请仔细核对）。',
-    '课程名称严格照抄图片里的文字，不要自己扩写、补充或推断（例如图上写「大学物理」就写「大学物理」）。',
+    '你是课表识别助手。这是一张网格课表：每一列是一个星期（周一~周日），每一行是一个节次（1~12节），格子里的文字就是课。',
+    '请逐行逐列扫描每一个格子，不要遗漏任何一门课，也不要把不同格子的课混在一起。',
+    '课程名称严格照抄图片里的文字，不要自己扩写、补充或推断；节次按该格子所在行来填（例如第 3 行是「3-4 节」就填 3 和 4）。',
     '只输出一个 JSON 数组，不要任何解释文字，不要 markdown 代码块。',
     '每门课一条，字段如下：',
     '{"name":"课程名","weekday":1,"startPeriod":1,"endPeriod":2,"room":"上课地点","teacher":"教师","weekFrom":1,"weekTo":20,"parity":"all"}',
-    '说明：weekday 用 1-7 表示周一到周日；startPeriod/endPeriod 是第几节（数字，单元格标注「1-2 节」就填 1 和 2）；',
-    'weekFrom/weekTo 是起止周（看不出就填 1 和 20）；parity 取 all（每周）/odd（单周）/even（双周）；',
+    '说明：weekday 用 1-7 表示周一到周日；startPeriod/endPeriod 是第几节（数字，不能超过 12）；',
+    'weekFrom/weekTo 是起止周（看不出就填 1 和 20；只上一周就两头填同一个数）；parity 取 all（每周）/odd（单周）/even（双周）；',
     '没有的信息用空字符串或默认值，不要编造。'
   ].join('\n');
 
@@ -736,7 +737,7 @@
       .trim();
     if (!text) return null;
 
-    // 先抽「周次范围」：1-16周 / 第1-16周（必须先抽，否则会被后面的节次范围抢走）
+    // 先抽「周次」：1-16周 / 第1-16周 / 第5周（必须先抽，否则会被后面的节次范围抢走）
     var weekFrom = null;
     var weekTo = null;
     var wr = text.match(/第?\s*(\d{1,2})\s*[-~到至]\s*(\d{1,2})\s*周/);
@@ -744,6 +745,12 @@
       weekFrom = Number(wr[1]);
       weekTo = Number(wr[2]);
       text = text.replace(wr[0], ' ');
+    } else {
+      var w1 = text.match(/第?\s*(\d{1,2})\s*周/);
+      if (w1) {
+        weekFrom = weekTo = Number(w1[1]);
+        text = text.replace(w1[0], ' ');
+      }
     }
 
     // 单双周
