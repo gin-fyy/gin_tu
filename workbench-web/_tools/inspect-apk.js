@@ -118,6 +118,25 @@ if (html) {
 }
 
 /* ---------- 插件（本地通知 + 热更新 + 浏览器） ---------- */
+/* ---------- APK 里带的「当前版本」必须与 package.json 一致 ----------
+   否则 App 会显示成旧版本，并反复提示更新同一版（www/version.json 必须在 cap sync 之前写入） */
+const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const localVj = byName.get('assets/public/version.json');
+if (!localVj) {
+  err('APK 里没有 assets/public/version.json（App 无法得知自己是什么版本）');
+} else {
+  let lv = null;
+  try { lv = JSON.parse(extract(buf, localVj).toString('utf8')); } catch (e) { lv = null; }
+  if (!lv || !lv.version) {
+    err('APK 内 www/version.json 解析失败');
+  } else if (lv.version !== pkg.version) {
+    err('APK 内 www/version.json 是 ' + lv.version + '，但 package.json 是 ' + pkg.version +
+        ' → App 会显示成旧版本并反复提示更新（www/version.json 必须在 cap sync 之前写入）');
+  } else {
+    ok('APK 内版本信息正确：' + lv.version + ' (' + lv.versionCode + ')');
+  }
+}
+
 const plugins = byName.get('assets/capacitor.plugins.json');
 if (plugins) {
   const list = JSON.parse(extract(buf, plugins).toString('utf8'));

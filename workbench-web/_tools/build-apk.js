@@ -171,6 +171,17 @@ function changelogNotes(version) {
   return [];
 }
 
+/* ---------- 写 www/version.json（App 启动时读它来知道自己是谁） ----------
+   注意：必须在 cap sync 之前调用，否则打进 APK 的还是上一版的内容，
+   App 里会显示成旧版本、并反复提示更新同一版。 */
+function writeLocalVersion(version, versionCode) {
+  fs.writeFileSync(path.join(ROOT, 'www', 'version.json'), JSON.stringify({
+    version: version,
+    versionCode: versionCode,
+    builtAt: new Date().toISOString()
+  }, null, 2), 'utf8');
+}
+
 /* ================= 主流程 ================= */
 (async function main() {
   /* 前置检查 */
@@ -197,38 +208,42 @@ function changelogNotes(version) {
   ].join(path.delimiter);
 
   /* 1. 图标 */
-  log('1/7 生成 App 图标');
+  log('1/8 生成 App 图标');
   run(process.execPath, [path.join('_tools', 'gen-app-icons.js')], { env: env });
 
   /* 2. Android 平台 */
   const capBin = path.join(ROOT, 'node_modules', '@capacitor', 'cli', 'bin', 'capacitor');
   if (!fs.existsSync(capBin)) die('找不到 @capacitor/cli，请先 npm.cmd install');
   if (!fs.existsSync(path.join(ANDROID, 'gradlew.bat'))) {
-    log('2/7 添加 android 平台（cap add android）');
+    log('2/8 添加 android 平台（cap add android）');
     run(process.execPath, [capBin, 'add', 'android'], { env: env });
   } else {
-    log('2/7 android 平台已存在，跳过 cap add');
+    log('2/8 android 平台已存在，跳过 cap add');
   }
 
   /* 3. local.properties */
-  log('3/7 写入 android/local.properties');
+  log('3/8 写入 android/local.properties');
   fs.writeFileSync(
     path.join(ANDROID, 'local.properties'),
     'sdk.dir=' + SDK.replace(/\\/g, '\\\\') + '\n',
     'utf8'
   );
 
-  /* 4. 同步 web 资源 */
-  log('4/7 cap sync android');
-  run(process.execPath, [capBin, 'sync', 'android'], { env: env });
-
-  /* 5. 版本号 + Gradle 镜像 */
-  log('5/7 写入版本号、配置 Gradle 下载源');
+  /* 4. 版本号 + Gradle 镜像
+       必须在 cap sync 之前：App 显示的「当前版本」来自 www/version.json，
+       而它是 cap sync 时被拷进 APK 的。顺序错了 App 就会显示成上一版。 */
+  log('4/8 写入版本号、配置 Gradle 下载源');
   const ver = bumpVersion() || { versionName: '0.0.0', versionCode: 0 };
   await configureGradleMirror();
+  writeLocalVersion(ver.versionName, ver.versionCode);
+  console.log('   www/version.json → ' + ver.versionName + ' (' + ver.versionCode + ')，稍后 cap sync 会打进 APK');
+
+  /* 5. 同步 web 资源 */
+  log('5/8 cap sync android');
+  run(process.execPath, [capBin, 'sync', 'android'], { env: env });
 
   /* 6. Gradle 构建 */
-  log('6/7 gradlew assembleDebug（首次会下载 Gradle 与依赖，比较慢）');
+  log('6/8 gradlew assembleDebug（首次会下载 Gradle 与依赖，比较慢）');
   const gradleArgs = ['assembleDebug', '--no-daemon'];
   if (process.env.WB_MAVEN_MIRROR === '1') {
     writeMavenInitScript();
@@ -238,7 +253,7 @@ function changelogNotes(version) {
   run('gradlew.bat', gradleArgs, { cwd: ANDROID, env: env, shell: true });
 
   /* 7. 收集产物 */
-  log('7/7 收集 APK');
+  log('7/8 收集 APK');
   const apk = path.join(ANDROID, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
   if (!fs.existsSync(apk)) die('构建结束但没找到 APK：' + apk);
   fs.mkdirSync(DIST, { recursive: true });
@@ -246,7 +261,9 @@ function changelogNotes(version) {
   fs.copyFileSync(apk, out);
   const size = (fs.statSync(out).size / 1024 / 1024).toFixed(1);
 
-  /* 生成 dist/version.json：App 内「检查更新」和 /update/ 下载页都读它 */
+  /* 8. 生成 dist/version.json（App 内「检查更新」和 /update/ 下载页都读它）
+        www/version.json 已在 cap sync 之前写好，这里不再改它，保证 APK 内外的版本号一致 */
+  log('8/8 生成更新信息');
   const buf = fs.readFileSync(out);
   const notes = changelogNotes(ver.versionName);
   const meta = {
@@ -259,13 +276,7 @@ function changelogNotes(version) {
     notes: notes
   };
   fs.writeFileSync(path.join(DIST, 'version.json'), JSON.stringify(meta, null, 2), 'utf8');
-  // 同时写进 www/：App 启动时读它，就知道自己是哪个版本（热更新 bundle 里不含它）
-  fs.writeFileSync(path.join(ROOT, 'www', 'version.json'), JSON.stringify({
-    version: meta.version,
-    versionCode: meta.versionCode,
-    builtAt: meta.builtAt
-  }, null, 2), 'utf8');
-  console.log('   版本信息：www/version.json + dist/version.json  (' + meta.version + ' / code ' + meta.versionCode + ')');
+  console.log('   版本信息：dist/version.json（www/version.json 已在 cap sync 前写入）  (' + meta.version + ' / code ' + meta.versionCode + ')');
   console.log('   更新日志：' + (notes.length ? notes.length + ' 条（来自 CHANGELOG.md）' : '（无）'));
 
   console.log('\n✅ 打包完成：' + out + '  (' + size + ' MB)');
