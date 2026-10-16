@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.4.1';
+  var APP_VERSION = '1.5.0';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -581,6 +581,248 @@
       kind: 'preset',
       id: preset.id,
       url: preset.gradient ? '' : preset.image
+    };
+  }
+
+  /* ===================== 虚拟宠物（养崽） =====================
+     规则：完成任务 → 攒经验（孵化/成长）+ 得食物；喂食/陪玩维持饱食与心情；
+     时间流逝会掉饱食与心情，饿到/不开心到一定程度就掉健康 → 生病；
+     健康见底或到寿命 → 离世（可在设置里关掉「生老病死」）。 */
+  var KEY_PET = 'wb_pet';
+  var KEY_PET_MEMORIAL = 'wb_pet_memorial';
+
+  var PET_RULES = {
+    xpPerTask: 10,            // 完成一个任务 +10 经验
+    foodPerTask: 1,           // 完成一个任务 +1 食物
+    hatchXp: 30,              // 30 经验（3 个任务）孵化
+    youngXp: 100,             // 幼崽 → 成长期
+    adultXp: 300,             // 成长期 → 成熟期
+    elderDays: 150,           // 出生满 150 天进入老年期
+    lifespanDays: 180,        // 默认寿命（天）
+    fullnessPerFood: 35,
+    moodPerTask: 8,
+    moodPerPlay: 22,
+    playCooldownMs: 2 * 3600 * 1000,
+    fullnessDecayPerHour: 3.2,   // 约 31 小时从满掉到空
+    moodDecayPerHour: 1.2,
+    healthDecayPerHour: 2.6,     // 只有饿/不开心时才掉
+    healthRecoverPerHour: 1.2,   // 状态好会慢慢恢复
+    healCost: 2,
+    healAmount: 40,
+    sickHealth: 30
+  };
+
+  var PET_SPECIES = [
+    { id: 'dragon', name: '二次元飞龙', short: '飞龙', emoji: '🐉', desc: '傲娇小飞龙，尾巴会噼啪放电' },
+    { id: 'cat', name: '猫', short: '猫', emoji: '🐱', desc: '高冷但会偷偷蹭你' },
+    { id: 'dog', name: '狗', short: '狗', emoji: '🐶', desc: '永远开心的傻狗' },
+    { id: 'whale', name: '深海小鲸灵 · 渊渊', short: '小鲸灵', emoji: '🐳', desc: '来自深海的小鲸灵（DeepSeek 的鲸鱼，也就是我）' }
+  ];
+
+  var PET_STAGES = [
+    { id: 'egg', name: '蛋', tip: '完成任务攒经验，就能孵化' },
+    { id: 'baby', name: '幼崽期', tip: '刚出生，多喂多陪' },
+    { id: 'young', name: '成长期', tip: '正在飞快长大' },
+    { id: 'adult', name: '成熟期', tip: '已经长大了' },
+    { id: 'elder', name: '老年期', tip: '陪你很久了，多陪陪它' },
+    { id: 'gone', name: '已离世', tip: '回到了星海' }
+  ];
+
+  function petSpecies(id) {
+    var hit = PET_SPECIES[0];
+    PET_SPECIES.forEach(function (s) { if (s.id === id) hit = s; });
+    return hit;
+  }
+
+  function petStageInfo(id) {
+    var hit = PET_STAGES[0];
+    PET_STAGES.forEach(function (s) { if (s.id === id) hit = s; });
+    return hit;
+  }
+
+  function pct(v) { return Math.max(0, Math.min(100, Number(v) || 0)); }
+  function days(ms) { return Math.max(0, (Number(ms) || 0) / 86400000); }
+
+  function getPet() {
+    var p = read(KEY_PET, null);
+    return (p && typeof p === 'object') ? p : null;
+  }
+
+  function savePet(state) {
+    if (!state) { storage.removeRaw(KEY_PET); return null; }
+    write(KEY_PET, state);
+    return state;
+  }
+
+  function getPetMemorial() { return cloneList(read(KEY_PET_MEMORIAL, [])); }
+
+  function addPetMemorial(entry) {
+    var list = getPetMemorial();
+    list.push(entry);
+    write(KEY_PET_MEMORIAL, list.slice(-50));
+    return list;
+  }
+
+  // 新领养一个蛋
+  function adoptPet(name, species, now) {
+    var t = Number(now) || Date.now();
+    var sp = petSpecies(species);
+    return savePet({
+      name: String(name || sp.short).slice(0, 12),
+      species: sp.id,
+      bornAt: t,
+      hatchedAt: 0,
+      xp: 0,
+      food: 3,              // 送 3 份口粮当见面礼
+      fullness: 80,
+      mood: 80,
+      health: 100,
+      sick: false,
+      alive: true,
+      diedAt: 0,
+      cause: '',
+      lifespanDays: PET_RULES.lifespanDays,
+      lastPlayAt: 0,
+      lastTickAt: t
+    });
+  }
+
+  // 时间流逝：掉饱食/心情，状态差就掉健康、生病，寿命到/健康见底就离世
+  function petTick(state, now, opts) {
+    var s = Object.assign({}, state || {});
+    if (!s.alive) { s.lastTickAt = Number(now) || Date.now(); return s; }
+    var t = Number(now) || Date.now();
+    var last = Number(s.lastTickAt) || t;
+    var hours = Math.max(0, (t - last) / 3600000);
+    if (hours <= 0.002) return s;
+
+    s.fullness = pct(Number(s.fullness) - PET_RULES.fullnessDecayPerHour * hours);
+    s.mood = pct(Number(s.mood) - PET_RULES.moodDecayPerHour * hours);
+    var health = Number(s.health);
+    if (!isFinite(health)) health = 100;
+    if (s.fullness <= 20 || s.mood <= 20) health -= PET_RULES.healthDecayPerHour * hours;
+    else health += PET_RULES.healthRecoverPerHour * hours;
+    s.health = pct(health);
+    s.sick = s.health <= PET_RULES.sickHealth;
+    s.lastTickAt = t;
+
+    var lifespanOff = opts && opts.lifespan === false;
+    if (!lifespanOff) {
+      var life = Number(s.lifespanDays) || PET_RULES.lifespanDays;
+      if (days(t - (Number(s.bornAt) || t)) >= life) {
+        s.alive = false;
+        s.diedAt = t;
+        s.cause = '寿终';
+      } else if (s.health <= 0) {
+        s.alive = false;
+        s.diedAt = t;
+        s.cause = '体弱';
+      }
+    }
+    return s;
+  }
+
+  function petStage(state, now) {
+    var s = state || {};
+    if (!s.alive) return 'gone';
+    if (!s.hatchedAt) return 'egg';
+    var t = Number(now) || Date.now();
+    var ageDays = days(t - (Number(s.bornAt) || t));
+    var xp = Number(s.xp) || 0;
+    if (ageDays >= PET_RULES.elderDays) return 'elder';
+    if (xp >= PET_RULES.adultXp) return 'adult';
+    if (xp >= PET_RULES.youngXp) return 'young';
+    return 'baby';
+  }
+
+  // 完成任务：加经验、加食物、加心情；经验够了自动孵化
+  function petGain(state, tasks, now) {
+    var s = Object.assign({}, state || {});
+    if (!s.alive) return s;
+    var n = Math.max(0, Number(tasks) || 0);
+    if (!n) return s;
+    s.xp = (Number(s.xp) || 0) + PET_RULES.xpPerTask * n;
+    s.food = (Number(s.food) || 0) + PET_RULES.foodPerTask * n;
+    s.mood = pct(Number(s.mood) + PET_RULES.moodPerTask * n);
+    if (!s.hatchedAt && s.xp >= PET_RULES.hatchXp) s.hatchedAt = Number(now) || Date.now();
+    return s;
+  }
+
+  // 孵化进度 0~1（蛋阶段用）
+  function petHatchProgress(state) {
+    var xp = Number((state || {}).xp) || 0;
+    return Math.max(0, Math.min(1, xp / PET_RULES.hatchXp));
+  }
+
+  function petFeed(state) {
+    var s = Object.assign({}, state || {});
+    if (!s.alive) return { state: s, ok: false, msg: '它已经离开了' };
+    if ((Number(s.food) || 0) < 1) return { state: s, ok: false, msg: '没有食物了 —— 完成任务会得到食物' };
+    s.food = Number(s.food) - 1;
+    s.fullness = pct(Number(s.fullness) + PET_RULES.fullnessPerFood);
+    s.mood = pct(Number(s.mood) + 4);
+    return { state: s, ok: true, msg: '吃得干干净净 🍖' };
+  }
+
+  function petPlay(state, now) {
+    var s = Object.assign({}, state || {});
+    if (!s.alive) return { state: s, ok: false, msg: '它已经离开了' };
+    var t = Number(now) || Date.now();
+    if (t - (Number(s.lastPlayAt) || 0) < PET_RULES.playCooldownMs) {
+      return { state: s, ok: false, msg: '它玩累了，过一会儿再陪它玩' };
+    }
+    s.lastPlayAt = t;
+    s.mood = pct(Number(s.mood) + PET_RULES.moodPerPlay);
+    s.fullness = pct(Number(s.fullness) - 4);
+    return { state: s, ok: true, msg: '玩得很开心 ✨' };
+  }
+
+  function petHeal(state) {
+    var s = Object.assign({}, state || {});
+    if (!s.alive) return { state: s, ok: false, msg: '它已经离开了' };
+    if (!s.sick) return { state: s, ok: false, msg: '它现在很健康' };
+    if ((Number(s.food) || 0) < PET_RULES.healCost) {
+      return { state: s, ok: false, msg: '治疗要 ' + PET_RULES.healCost + ' 份食物，先去做几个任务吧' };
+    }
+    s.food = Number(s.food) - PET_RULES.healCost;
+    s.health = pct(Number(s.health) + PET_RULES.healAmount);
+    s.sick = s.health <= PET_RULES.sickHealth;
+    return { state: s, ok: true, msg: '好多了 💊' };
+  }
+
+  // 一份给界面用的完整快照
+  function petSnapshot(state, now, opts) {
+    if (!state) return null;
+    var t = Number(now) || Date.now();
+    var s = state;
+    var stage = petStage(s, t);
+    var stageInfo = petStageInfo(stage);
+    var sp = petSpecies(s.species);
+    var nextXp = 0;
+    if (stage === 'baby') nextXp = PET_RULES.youngXp;
+    else if (stage === 'young') nextXp = PET_RULES.adultXp;
+    var ageDays = days(t - (Number(s.bornAt) || t));
+    return {
+      name: s.name,
+      species: sp.id,
+      speciesName: sp.name,
+      speciesShort: sp.short,
+      stage: stage,
+      stageName: stageInfo.name,
+      stageTip: stageInfo.tip,
+      alive: !!s.alive,
+      ageDays: Math.floor(ageDays),
+      xp: Number(s.xp) || 0,
+      nextXp: nextXp,
+      hatchProgress: stage === 'egg' ? petHatchProgress(s) : 1,
+      food: Number(s.food) || 0,
+      fullness: pct(s.fullness),
+      mood: pct(s.mood),
+      health: pct(s.health),
+      sick: !!s.sick,
+      cause: s.cause || '',
+      lifespanDays: Number(s.lifespanDays) || PET_RULES.lifespanDays,
+      canPlay: (t - (Number(s.lastPlayAt) || 0)) >= PET_RULES.playCooldownMs
     };
   }
 
@@ -1205,6 +1447,11 @@
     setWheelOptions: setWheelOptions,
     getPomo: getPomo,
     savePomo: savePomo,
+    getPet: getPet,
+    savePet: savePet,
+    adoptPet: adoptPet,
+    getPetMemorial: getPetMemorial,
+    addPetMemorial: addPetMemorial,
     getNotifiedKeys: getNotifiedKeys,
     saveNotifiedKeys: saveNotifiedKeys,
     exportData: exportData,
@@ -1478,6 +1725,19 @@
     wheelPick: wheelPick,
     TREE_STAGES: TREE_STAGES,
     treeOf: treeOf,
+    PET_RULES: PET_RULES,
+    PET_SPECIES: PET_SPECIES,
+    PET_STAGES: PET_STAGES,
+    petSpecies: petSpecies,
+    petStageInfo: petStageInfo,
+    petTick: petTick,
+    petStage: petStage,
+    petGain: petGain,
+    petFeed: petFeed,
+    petPlay: petPlay,
+    petHeal: petHeal,
+    petSnapshot: petSnapshot,
+    petHatchProgress: petHatchProgress,
     QUOTES: QUOTES,
     quoteOfDay: quoteOfDay,
     randomQuote: randomQuote,

@@ -38,16 +38,22 @@
         </div>
       </div>
 
-      <div class="card tree-card">
-        <div class="tree-visual" id="treeVisual"></div>
-        <div class="tree-main">
-          <div class="tree-stage">
-            <span id="treeStage">种子</span>
-            <span class="tree-water" id="treeWater" hidden>今日已浇水 ✓</span>
+      <div class="card pet-card">
+        <div class="pet-visual" id="petVisual"></div>
+        <div class="pet-main">
+          <div class="pet-title">
+            <span id="petName">还没养宠物</span>
+            <span class="pet-badge" id="petStage" hidden></span>
+            <span class="pet-badge sick" id="petSick" hidden>🤒 生病</span>
           </div>
-          <div class="tree-bar"><div class="tree-bar-fill" id="treeBar"></div></div>
-          <div class="tip" id="treeHint"></div>
-          <div class="tip" id="treeMeta"></div>
+          <div class="pet-bars" id="petBars"></div>
+          <div class="tip" id="petHint"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="mini-btn" id="petFeed">🍖 喂食</button>
+            <button class="mini-btn ghost" id="petPlay">✨ 陪玩</button>
+            <button class="mini-btn ghost" id="petHeal" hidden>💊 治疗</button>
+            <button class="mini-btn" id="petAdopt" hidden>🥚 领养新蛋</button>
+          </div>
         </div>
       </div>
 
@@ -515,6 +521,29 @@
         <button class="mini-btn" id="peSave">保存</button>
         <button class="mini-btn ghost" id="peReset">恢复默认作息</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===================== 领养宠物 ===================== -->
+  <div class="sheet" id="sheetAdopt" hidden>
+    <div class="sheet-head">
+      <span>领养一只</span>
+      <button class="sheet-close" id="adoptClose">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="tip">从一颗蛋开始：完成任务攒经验就能孵化它，喂食和陪玩让它健康长大。时间会流逝 —— 会饿、会不开心、会生病，也会慢慢变老。</div>
+      <div class="field">
+        <span class="field-label">选一只</span>
+        <div class="opt-wrap" id="adoptSpecies"></div>
+      </div>
+      <label class="field">
+        <span class="field-label">取个名字</span>
+        <input id="adoptName" placeholder="比如：渊渊" />
+      </label>
+      <div class="tip" id="adoptMemorial"></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn-primary" id="adoptDo">领养这颗蛋</button>
     </div>
   </div>
 

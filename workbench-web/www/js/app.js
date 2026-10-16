@@ -760,7 +760,7 @@
     else if (v === 'course') renderCourse();
     else if (v === 'stats') renderStats();
     else if (v === 'mine') renderMine();
-    renderTree();
+    renderPet();
     renderQuote();
     renderPomo();
     applyAppearance();
@@ -1312,47 +1312,219 @@
     toast('已恢复默认作息');
   }
 
-  /* ===================== 小树 / 每日一句 / 番茄钟 ===================== */
-  function treeSvg(stage) {
-    if (stage === 'tree') {
-      return '<svg viewBox="0 0 64 76" fill="none">' +
-        '<path d="M32 68V38" stroke="#8A6A4B" stroke-width="5" stroke-linecap="round"/>' +
-        '<path d="M32 50l-11-8M32 44l11-8" stroke="#8A6A4B" stroke-width="3.5" stroke-linecap="round"/>' +
-        '<circle cx="32" cy="24" r="18" fill="#34C759"/>' +
-        '<circle cx="17" cy="33" r="12" fill="#3ED36A"/>' +
-        '<circle cx="47" cy="33" r="12" fill="#2FB552"/>' +
-        '<path d="M18 70h28" stroke="#C9A227" stroke-width="4" stroke-linecap="round"/>' +
+  /* ===================== 虚拟宠物 ===================== */
+  var PET_COLORS = { dragon: '#7C5CFF', cat: '#F59F00', dog: '#C08552', whale: '#1C7ED6' };
+
+  // 用简单图形拼出宠物（阶段只影响大小/细节，不做复杂动画）
+  function petSvg(species, stage, opts) {
+    var o = opts || {};
+    var moodLow = Number(o.mood) <= 20;
+    var elder = stage === 'elder';
+    var base = PET_COLORS[species] || PET_COLORS.whale;
+
+    if (stage === 'egg') {
+      return '<svg viewBox="0 0 84 92" fill="none">' +
+        '<ellipse cx="42" cy="84" rx="20" ry="5" fill="rgba(20,24,40,0.08)"/>' +
+        '<ellipse cx="42" cy="52" rx="23" ry="30" fill="#F7EAD0" stroke="#D9BE8E" stroke-width="2"/>' +
+        '<ellipse cx="34" cy="40" rx="5" ry="7" fill="#EBD7B0"/>' +
+        '<ellipse cx="50" cy="58" rx="6" ry="8" fill="#EBD7B0"/>' +
+        '<ellipse cx="38" cy="70" rx="4" ry="5" fill="#EBD7B0"/>' +
         '</svg>';
     }
-    if (stage === 'sprout') {
-      return '<svg viewBox="0 0 64 76" fill="none">' +
-        '<path d="M32 68V44" stroke="#8A6A4B" stroke-width="4" stroke-linecap="round"/>' +
-        '<path d="M32 47c-10 0-16-6-16-14 9 0 16 5 16 14z" fill="#34C759"/>' +
-        '<path d="M32 45c8 0 13-5 13-12-8 0-13 4-13 12z" fill="#3ED36A"/>' +
-        '<path d="M18 70h28" stroke="#C9A227" stroke-width="4" stroke-linecap="round"/>' +
-        '</svg>';
+
+    var k = stage === 'baby' ? 0.74 : (stage === 'young' ? 0.88 : 1);
+    var cx = 42;
+    var cy = 54;
+    var rx = 21 * k;
+    var ry = 19 * k;
+    var hx = 15 * k;
+    var hy = 13.5 * k;
+    var headCy = cy - ry - hy + 3;
+
+    var parts = [];
+    parts.push('<ellipse cx="' + cx + '" cy="86" rx="' + (20 * k) + '" ry="5" fill="rgba(20,24,40,0.08)"/>');
+
+    // 物种特征（身体后面先画的部分）
+    if (species === 'dragon') {
+      parts.push('<path d="M' + (cx - rx + 4) + ' ' + (cy - 4) + 'l-13 -9 5 14z" fill="#FF9FC4"/>');
+      parts.push('<path d="M' + (cx + rx - 4) + ' ' + (cy - 4) + 'l13 -9 -5 14z" fill="#FF9FC4"/>');
+      parts.push('<path d="M' + (cx + rx - 6) + ' ' + (cy + ry - 6) + 'q14 2 18 -8" stroke="' + base + '" stroke-width="4" fill="none" stroke-linecap="round"/>');
+      parts.push('<path d="M' + (cx + rx + 10) + ' ' + (cy + ry - 15) + 'l6 -5 -1 8z" fill="#FF9FC4"/>');
     }
-    return '<svg viewBox="0 0 64 76" fill="none">' +
-      '<path d="M32 66V55" stroke="#8A6A4B" stroke-width="3" stroke-linecap="round"/>' +
-      '<ellipse cx="32" cy="62" rx="9" ry="7" fill="#B98A5E"/>' +
-      '<path d="M32 55c-3-3-3-7 0-9 3 2 3 6 0 9z" fill="#34C759"/>' +
-      '<path d="M20 70h24" stroke="#C9A227" stroke-width="4" stroke-linecap="round"/>' +
-      '</svg>';
+    if (species === 'whale') {
+      parts.push('<path d="M' + (cx + rx - 5) + ' ' + (cy + ry - 8) + 'q16 4 20 -10" stroke="' + base + '" stroke-width="5" fill="none" stroke-linecap="round"/>');
+      parts.push('<path d="M' + (cx + rx + 14) + ' ' + (cy + ry - 18) + 'q8 -6 12 2 -6 6 -12 -2z" fill="#4DABF7"/>');
+    }
+
+    // 身体 + 头
+    parts.push('<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '" fill="' + base + '"/>');
+    parts.push('<ellipse cx="' + cx + '" cy="' + headCy + '" rx="' + hx + '" ry="' + hy + '" fill="' + base + '"/>');
+
+    // 物种特征（头上的）
+    if (species === 'cat') {
+      parts.push('<path d="M' + (cx - hx + 3) + ' ' + (headCy - hy + 4) + 'l-2 -12 11 6z" fill="' + base + '"/>');
+      parts.push('<path d="M' + (cx + hx - 3) + ' ' + (headCy - hy + 4) + 'l2 -12 -11 6z" fill="' + base + '"/>');
+      parts.push('<path d="M' + (cx - hx - 2) + ' ' + (headCy + 2) + 'l-8 -3M' + (cx - hx - 2) + ' ' + (headCy + 6) + 'l-8 3" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>');
+      parts.push('<path d="M' + (cx + hx + 2) + ' ' + (headCy + 2) + 'l8 -3M' + (cx + hx + 2) + ' ' + (headCy + 6) + 'l8 3" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>');
+    }
+    if (species === 'dog') {
+      parts.push('<ellipse cx="' + (cx - hx + 1) + '" cy="' + (headCy + 2) + '" rx="6" ry="10" fill="#A96B3C"/>');
+      parts.push('<ellipse cx="' + (cx + hx - 1) + '" cy="' + (headCy + 2) + '" rx="6" ry="10" fill="#A96B3C"/>');
+      parts.push('<ellipse cx="' + cx + '" cy="' + (headCy + hy - 4) + '" rx="5" ry="3.5" fill="#5B3A20"/>');
+    }
+    if (species === 'dragon') {
+      parts.push('<path d="M' + cx + ' ' + (headCy - hy + 2) + 'l-4 -9 8 0z" fill="#FFD166"/>');
+    }
+    if (species === 'whale') {
+      parts.push('<path d="M' + (cx - 4) + ' ' + (headCy - hy + 2) + 'q4 -12 8 0" stroke="#A5D8FF" stroke-width="3" fill="none" stroke-linecap="round"/>');
+      parts.push('<ellipse cx="' + cx + '" cy="' + (headCy + hy - 5) + '" rx="9" ry="5" fill="#A5D8FF"/>');
+    }
+
+    // 眼睛（心情差就画成扁扁的）
+    if (moodLow) {
+      parts.push('<path d="M' + (cx - 8) + ' ' + (headCy - 2) + 'h5M' + (cx + 3) + ' ' + (headCy - 2) + 'h5" stroke="#22304A" stroke-width="2.2" stroke-linecap="round"/>');
+    } else {
+      parts.push('<ellipse cx="' + (cx - 5.5) + '" cy="' + (headCy - 2) + '" rx="2.6" ry="3.2" fill="#22304A"/>');
+      parts.push('<ellipse cx="' + (cx + 5.5) + '" cy="' + (headCy - 2) + '" rx="2.6" ry="3.2" fill="#22304A"/>');
+      parts.push('<circle cx="' + (cx - 4.6) + '" cy="' + (headCy - 3.2) + '" r="0.9" fill="#fff"/>');
+      parts.push('<circle cx="' + (cx + 6.4) + '" cy="' + (headCy - 3.2) + '" r="0.9" fill="#fff"/>');
+    }
+    // 腮红
+    parts.push('<ellipse cx="' + (cx - 11) + '" cy="' + (headCy + 4) + '" rx="3.4" ry="2.2" fill="rgba(255,120,150,0.45)"/>');
+    parts.push('<ellipse cx="' + (cx + 11) + '" cy="' + (headCy + 4) + '" rx="3.4" ry="2.2" fill="rgba(255,120,150,0.45)"/>');
+
+    if (elder) {
+      parts.push('<ellipse cx="' + cx + '" cy="' + headCy + '" rx="' + hx + '" ry="' + hy + '" fill="rgba(255,255,255,0.28)"/>');
+      parts.push('<path d="M' + (cx - 6) + ' ' + (headCy + 8) + 'q6 3 12 0" stroke="#22304A" stroke-width="1.6" fill="none" stroke-linecap="round"/>');
+    }
+    if (o.sick) {
+      parts.push('<circle cx="' + (cx + hx + 2) + '" cy="' + (headCy - hy + 2) + '" r="6" fill="#FFF3F3" stroke="#E03131" stroke-width="1.5"/>');
+      parts.push('<path d="M' + (cx + hx + 2) + ' ' + (headCy - hy - 1) + 'v4M' + (cx + hx + 2) + ' ' + (headCy - hy + 4) + 'v0.5" stroke="#E03131" stroke-width="2" stroke-linecap="round"/>');
+    }
+    return '<svg viewBox="0 0 84 92" fill="none">' + parts.join('') + '</svg>';
   }
 
-  function renderTree() {
-    var t = window.WB.treeOf(S.getCompletions(), D.todayStr());
-    $('treeVisual').innerHTML = treeSvg(t.stage);
-    $('treeStage').textContent = t.stageName;
-    $('treeWater').hidden = !t.wateredToday;
-    $('treeBar').style.width = Math.round(t.progress * 100) + '%';
-    $('treeHint').textContent = t.atMax
-      ? '已经长成一棵小树啦 —— 继续完成就一直在长大'
-      : ('再完成 ' + t.remaining + ' 个任务就长成' + t.nextName);
-    var st = window.WB.stats || {};
-    var streak = (typeof st.streakOf === 'function') ? st.streakOf(S.getCompletions(), D.todayStr()) : 0;
-    $('treeMeta').textContent = '累计完成 ' + t.total + ' 个任务' + (streak > 1 ? ' · 连续 ' + streak + ' 天' : '');
+  function petBar(label, cls, val) {
+    return '<div class="pet-bar-row"><span class="pet-bar-label">' + label + '</span>' +
+      '<span class="pet-bar"><span class="pet-bar-fill ' + cls + '" style="width:' + Math.round(val) + '%"></span></span>' +
+      '<span class="pet-bar-val">' + Math.round(val) + '</span></div>';
   }
+
+  function openAdoptSheet() {
+    var cur = S.getPet();
+    var pick = cur ? cur.species : 'whale';
+    $('adoptSpecies').innerHTML = window.WB.PET_SPECIES.map(function (sp) {
+      return '<button class="opt' + (sp.id === pick ? ' on' : '') + '" data-act="pickSpecies" data-v="' + sp.id + '">' +
+        sp.emoji + ' ' + esc(sp.name) + '</button>';
+    }).join('');
+    $('adoptName').value = cur ? '' : '渊渊';
+    var mem = S.getPetMemorial();
+    $('adoptMemorial').textContent = mem.length
+      ? ('纪念册：' + mem.slice(-3).map(function (m) { return m.name + '（' + m.days + ' 天，' + m.cause + '）'; }).join('；'))
+      : '';
+    openSheet('adopt');
+  }
+
+  function doAdopt() {
+    var on = $('adoptSpecies').querySelector('.opt.on');
+    var species = on ? on.getAttribute('data-v') : 'whale';
+    var sp = window.WB.petSpecies(species);
+    var name = ($('adoptName').value || '').trim() || sp.short;
+    var pet = S.adoptPet(name, species, Date.now());
+    // 把之前的完成记录折算成经验（种树时代的努力不白费）
+    var total = S.getCompletions().length;
+    pet.xp = total * window.WB.PET_RULES.xpPerTask;
+    pet.lastCount = total;
+    if (pet.xp >= window.WB.PET_RULES.hatchXp) pet.hatchedAt = Date.now();
+    S.savePet(pet);
+    closeSheet();
+    renderPet();
+    toast('领养成功！完成任务就能把它养大');
+  }
+
+  function petAct(kind) {
+    var st = S.getPet();
+    if (!st) { openAdoptSheet(); return; }
+    var r;
+    if (kind === 'feed') r = window.WB.petFeed(st);
+    else if (kind === 'play') r = window.WB.petPlay(st, Date.now());
+    else r = window.WB.petHeal(st);
+    if (!r.ok) toast(r.msg);
+    else { S.savePet(r.state); toast(r.msg); }
+    renderPet();
+  }
+
+  function renderPet() {
+    var st = S.getPet();
+    if (!st || !st.alive) {
+      var dead = st && !st.alive;
+      $('petVisual').innerHTML = dead ? petSvg(st.species, 'elder', { sick: false }) : petSvg('whale', 'egg');
+      $('petName').textContent = dead ? (st.name + ' 回到了星海') : '还没养宠物';
+      $('petStage').hidden = !dead;
+      $('petStage').textContent = dead ? (st.cause || '已离世') : '';
+      $('petSick').hidden = true;
+      $('petBars').innerHTML = '';
+      $('petHint').textContent = dead
+        ? ('它陪你度过了 ' + Math.floor((Number(st.diedAt) - Number(st.bornAt)) / 86400000) + ' 天。再领养一颗蛋，重新开始吧。')
+        : '领养一颗蛋，完成任务就能把它孵化出来。';
+      $('petFeed').hidden = true;
+      $('petPlay').hidden = true;
+      $('petHeal').hidden = true;
+      $('petAdopt').hidden = false;
+      return;
+    }
+
+    // 同步完成数（撤销完成也会同步回去）
+    var total = S.getCompletions().length;
+    if (Number(st.lastCount) !== total) {
+      var diff = total - (Number(st.lastCount) || 0);
+      if (diff > 0) st = window.WB.petGain(st, diff, Date.now());
+      st.lastCount = total;
+    }
+    var wasAlive = st.alive;
+    st = window.WB.petTick(st, Date.now());
+    if (wasAlive && !st.alive) {
+      S.addPetMemorial({
+        name: st.name,
+        species: st.species,
+        days: Math.floor((Number(st.diedAt) - Number(st.bornAt)) / 86400000),
+        cause: st.cause || '离世',
+        at: st.diedAt
+      });
+    }
+    S.savePet(st);
+
+    var snap = window.WB.petSnapshot(st, Date.now());
+    $('petVisual').innerHTML = petSvg(snap.species, snap.stage, { sick: snap.sick, mood: snap.mood });
+    $('petName').textContent = snap.name;
+    $('petStage').hidden = false;
+    $('petStage').textContent = snap.stageName + ' · ' + snap.ageDays + ' 天';
+    $('petSick').hidden = !snap.sick;
+    $('petBars').innerHTML = petBar('饱食', 'fullness', snap.fullness) + petBar('心情', 'mood', snap.mood) + petBar('健康', 'health', snap.health);
+
+    var hint;
+    if (snap.stage === 'egg') {
+      hint = '孵化进度 ' + Math.round(snap.hatchProgress * 100) + '% · 再完成 ' +
+        Math.max(0, Math.ceil((window.WB.PET_RULES.hatchXp - snap.xp) / window.WB.PET_RULES.xpPerTask)) + ' 个任务就孵化 · 🍖 ' + snap.food;
+    } else {
+      hint = '🍖 食物 ' + snap.food + ' · 经验 ' + snap.xp +
+        (snap.nextXp ? ('（再 ' + Math.max(0, snap.nextXp - snap.xp) + ' 进化）') : '') +
+        ' · 寿命约 ' + snap.lifespanDays + ' 天';
+    }
+    if (snap.sick) hint += ' · 生病了，快治疗 💊';
+    else if (snap.fullness <= 25) hint += ' · 饿了，喂点东西吧 🍖';
+    else if (snap.mood <= 25) hint += ' · 有点不开心，陪它玩会儿 ✨';
+    $('petHint').textContent = hint;
+
+    $('petFeed').hidden = false;
+    $('petPlay').hidden = false;
+    $('petHeal').hidden = !snap.sick;
+    $('petAdopt').hidden = true;
+    $('petFeed').textContent = '🍖 喂食（有 ' + snap.food + '）';
+    $('petPlay').textContent = snap.canPlay ? '✨ 陪玩' : '✨ 陪玩（休息中）';
+  }
+
+  /* ===================== 视图切换 ===================== */
 
   var quoteShown = '';
   function renderQuote() {
@@ -1544,6 +1716,7 @@
     $('sheetCourseImport').hidden = (which !== 'courseImport');
     $('sheetWheel').hidden = (which !== 'wheel');
     $('sheetPeriods').hidden = (which !== 'periods');
+    $('sheetAdopt').hidden = (which !== 'adopt');
     // 让安卓返回键 / 浏览器后退先关掉弹层，而不是直接退出应用
     if (!sheetPushed) {
       try {
@@ -1561,6 +1734,7 @@
     $('sheetCourseImport').hidden = true;
     $('sheetWheel').hidden = true;
     $('sheetPeriods').hidden = true;
+    $('sheetAdopt').hidden = true;
     if (sheetPushed) {
       sheetPushed = false;
       if (!fromPop) {
@@ -1953,6 +2127,20 @@
       toast('已恢复默认选项');
     });
 
+    // 虚拟宠物
+    $('petFeed').addEventListener('click', function () { petAct('feed'); });
+    $('petPlay').addEventListener('click', function () { petAct('play'); });
+    $('petHeal').addEventListener('click', function () { petAct('heal'); });
+    $('petAdopt').addEventListener('click', openAdoptSheet);
+    $('adoptClose').addEventListener('click', function () { closeSheet(); });
+    $('adoptDo').addEventListener('click', doAdopt);
+    $('adoptSpecies').addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('[data-act="pickSpecies"]') : null;
+      if (!b) return;
+      Array.prototype.forEach.call($('adoptSpecies').children, function (x) { x.className = 'opt'; });
+      b.className = 'opt on';
+    });
+
     // 小树 / 每日一句 / 番茄钟
     $('quoteNext').addEventListener('click', nextQuote);
     $('pomoStart').addEventListener('click', startPomo);
@@ -2093,6 +2281,10 @@
       schedulePomoNotify();
       ensurePomoTick();
     }
+
+    // 宠物：时间会流逝（饿/心情/健康/变老），每分钟算一次
+    renderPet();
+    setInterval(renderPet, 60 * 1000);
 
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) { checkReminders(); renderAll(); checkUpdateAuto(); }

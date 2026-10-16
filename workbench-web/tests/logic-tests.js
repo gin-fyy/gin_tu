@@ -895,6 +895,72 @@ function makeCases(mode) {
     ok(s.w > 0 && s.h > 0, '尺寸缺失时也要给出合理值：' + JSON.stringify(s));
   };
 
+  cases['宠物: 孵化 / 成长 / 饿 / 病 / 寿终'] = (WB) => {
+    const T0 = 1760000000000;
+    let pet = WB.store.adoptPet('渊渊', 'whale', T0);
+    eq(pet.species, 'whale');
+    eq(pet.hatchedAt, 0);
+    eq(WB.petStage(pet, T0), 'egg');
+    eq(WB.petSnapshot(pet, T0).stageName, '蛋');
+
+    // 完成 3 个任务 → 攒够 30 经验 → 孵化
+    pet = WB.petGain(pet, 3, T0 + 1000);
+    ok(pet.hatchedAt > 0, '攒够经验应该孵化');
+    eq(WB.petStage(pet, T0 + 1000), 'baby');
+    eq(pet.xp, 30);
+    eq(pet.food, 6);                       // 见面礼 3 + 完成任务 3
+    eq(WB.petSnapshot(pet, T0 + 1000).stageName, '幼崽期');
+
+    // 阶段随经验推进
+    eq(WB.petStage(Object.assign({}, pet, { xp: 120 }), T0), 'young');
+    eq(WB.petStage(Object.assign({}, pet, { xp: 320 }), T0), 'adult');
+    eq(WB.petStage(Object.assign({}, pet, { xp: 320 }), T0 + 151 * 86400000), 'elder');
+
+    // 时间流逝：会饿、心情会掉
+    const ticked = WB.petTick(pet, T0 + 10 * 3600000);
+    ok(ticked.fullness < pet.fullness, '10 小时后应该更饿：' + ticked.fullness);
+    ok(ticked.mood < pet.mood, '心情也会下降');
+
+    // 连续两天不管 → 变虚弱/生病
+    const day2 = WB.petTick(WB.petTick(pet, T0 + 24 * 3600000), T0 + 48 * 3600000);
+    ok(day2.health < 100, '两天不管健康应该下降：' + day2.health);
+    ok(day2.sick === true, '健康低于阈值应该生病：' + JSON.stringify({ h: day2.health, sick: day2.sick }));
+
+    // 喂食：消耗食物、回饱食；没食物喂不了
+    const feed = WB.petFeed(Object.assign({}, pet, { food: 2, fullness: 10 }));
+    eq(feed.ok, true);
+    eq(feed.state.food, 1);
+    ok(feed.state.fullness > 10, '喂食应该回饱食');
+    eq(WB.petFeed(Object.assign({}, pet, { food: 0 })).ok, false);
+
+    // 陪玩：有 2 小时冷却
+    const play = WB.petPlay(Object.assign({}, pet, { lastPlayAt: 0 }), T0);
+    eq(play.ok, true);
+    eq(WB.petPlay(play.state, T0 + 1000).ok, false);
+    eq(WB.petPlay(play.state, T0 + 3 * 3600000).ok, true);
+
+    // 治疗：要食物，且只对生病的有效
+    const heal = WB.petHeal(Object.assign({}, pet, { health: 10, sick: true, food: 5 }));
+    eq(heal.ok, true);
+    ok(heal.state.health > 10, '治疗应该回血');
+    eq(WB.petHeal(Object.assign({}, pet, { food: 0, sick: true, health: 10 })).ok, false);
+    eq(WB.petHeal(Object.assign({}, pet, { sick: false })).ok, false);
+
+    // 生老病死：默认 180 天寿终
+    const dead = WB.petTick(pet, T0 + 181 * 86400000);
+    eq(dead.alive, false);
+    eq(dead.cause, '寿终');
+    eq(WB.petStage(dead, T0 + 181 * 86400000), 'gone');
+    eq(WB.petSnapshot(dead, T0).alive, false);
+    // 关掉生老病死就不会离世
+    eq(WB.petTick(pet, T0 + 181 * 86400000, { lifespan: false }).alive, true);
+
+    // 纪念册
+    const list = WB.store.addPetMemorial({ name: '渊渊', species: 'whale', days: 180, cause: '寿终', at: T0 });
+    eq(list.length, 1);
+    eq(WB.store.getPetMemorial()[0].name, '渊渊');
+  };
+
   return cases;
 }
 

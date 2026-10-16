@@ -794,28 +794,42 @@ function injectApkInstaller(w) {
     }
   });
 
-  await test('小树 / 每日一句 / 番茄钟', async (w) => {
-    // 小树：初始是种子
-    if ($(w, '#treeStage').textContent !== '种子') throw new Error('初始应是种子：' + $(w, '#treeStage').textContent);
+  await test('宠物 / 每日一句 / 番茄钟', async (w) => {
+    // 未领养：显示空蛋 + 领养按钮
+    if ($(w, '#petName').textContent.indexOf('还没养宠物') < 0) throw new Error('应显示未领养：' + $(w, '#petName').textContent);
+    if ($(w, '#petAdopt').hidden) throw new Error('未领养时应显示领养按钮');
 
-    // 完成一个任务（走真实 UI：点勾）
-    addQuick(w, '种一棵树');
-    click(w, $$(w, '#homeGroups .tcard .check')[0]);
-    await sleep(30);
-    if ($(w, '#treeMeta').textContent.indexOf('累计完成 1 个任务') < 0) {
-      throw new Error('完成一个任务后小树应长一点：' + $(w, '#treeMeta').textContent);
-    }
-    if ($(w, '#treeWater').hidden) throw new Error('今天完成过就应该显示「今日已浇水」');
+    // 领养一颗蛋（选飞龙）
+    click(w, $(w, '#petAdopt'));
+    if ($(w, '#sheetAdopt').hidden) throw new Error('领养弹层没打开');
+    click(w, $(w, '#adoptSpecies').querySelector('[data-v="dragon"]'));
+    type(w, $(w, '#adoptName'), '小火龙');
+    click(w, $(w, '#adoptDo'));
+    const pet0 = w.WB.store.getPet();
+    if (!pet0 || pet0.name !== '小火龙' || pet0.species !== 'dragon') throw new Error('宠物没保存：' + JSON.stringify(pet0));
+    if ($(w, '#petStage').textContent.indexOf('蛋') < 0) throw new Error('刚领养时应该是蛋：' + $(w, '#petStage').textContent);
 
-    // 再凑到 3 个 → 幼苗
-    const ids = w.WB.store.getTasks().map((t) => t.id);
-    for (let i = 0; i < 2; i++) w.WB.store.addTask({ title: '凑数 ' + i });
-    w.WB.store.getTasks().filter((t) => ids.indexOf(t.id) < 0).forEach((t) => w.WB.store.toggleDone(t.id));
+    // 完成 3 个任务 → 孵化
+    for (let i = 0; i < 3; i++) addQuick(w, '养崽任务' + i);
+    w.WB.store.getTasks().filter((t) => !t.done).forEach((t) => w.WB.store.toggleDone(t.id));
     w.document.dispatchEvent(new w.Event('visibilitychange'));
-    await sleep(40);
-    if ($(w, '#treeStage').textContent !== '幼苗') {
-      throw new Error('完成 3 个应该长成幼苗：' + $(w, '#treeStage').textContent);
+    await sleep(80);
+    if ($(w, '#petStage').textContent.indexOf('蛋') >= 0) {
+      throw new Error('完成 3 个任务后应该孵化：' + $(w, '#petStage').textContent);
     }
+    if ($(w, '#petBars').children.length !== 3) throw new Error('应该有三条状态条');
+
+    // 喂食：把饱食压到 10，点喂食应涨回来
+    const cur = w.WB.store.getPet();
+    w.WB.store.savePet(Object.assign({}, cur, { fullness: 10, food: 3 }));
+    click(w, $(w, '#petFeed'));
+    const after = w.WB.store.getPet();
+    if (after.fullness <= 10) throw new Error('喂食没生效：' + after.fullness);
+    if (after.food !== 2) throw new Error('喂食应该消耗一份食物：' + after.food);
+
+    // 陪玩：状态应该存下来（有冷却）
+    click(w, $(w, '#petPlay'));
+    if (!w.WB.store.getPet().lastPlayAt) throw new Error('陪玩没记录时间');
 
     // 每日一句
     const q1 = $(w, '#quoteText').textContent;

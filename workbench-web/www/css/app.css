@@ -568,6 +568,24 @@ input[type="range"] { padding: 0; border: none; background: transparent; }
 .pomo-time.running { color: var(--primary); }
 .pomo-min.on { background: var(--primary); color: #fff; border-color: var(--primary); }
 
+/* ===== 虚拟宠物 ===== */
+.pet-card { display: flex; align-items: flex-start; gap: 14px; }
+.pet-visual { flex: 0 0 84px; height: 92px; display: flex; align-items: center; justify-content: center; }
+.pet-visual svg { width: 84px; height: 92px; }
+.pet-main { flex: 1; min-width: 0; }
+.pet-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; flex-wrap: wrap; }
+.pet-badge { font-size: 11px; font-weight: 500; color: var(--primary); background: var(--primary-light); border-radius: 999px; padding: 2px 8px; }
+.pet-badge.sick { color: #C92A2A; background: #FFF3F3; }
+.pet-bars { margin: 9px 0 6px; display: flex; flex-direction: column; gap: 6px; }
+.pet-bar-row { display: flex; align-items: center; gap: 8px; }
+.pet-bar-label { flex: 0 0 46px; font-size: 11px; color: var(--muted); }
+.pet-bar { flex: 1; height: 7px; border-radius: 999px; background: #EEF1F6; overflow: hidden; }
+.pet-bar-fill { height: 100%; width: 0%; border-radius: 999px; transition: width 0.3s ease; }
+.pet-bar-fill.fullness { background: linear-gradient(90deg, #F59F00, #E8590C); }
+.pet-bar-fill.mood { background: linear-gradient(90deg, #4C6EF5, #7C5CFF); }
+.pet-bar-fill.health { background: linear-gradient(90deg, #3ED36A, #12B886); }
+.pet-bar-val { flex: 0 0 34px; text-align: right; font-size: 11px; color: var(--muted); }
+
 /* ===== 窄屏微调 ===== */
 @media (max-width: 360px) {
   .stat-item .num { font-size: 20px; }
