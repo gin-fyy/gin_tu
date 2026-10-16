@@ -661,9 +661,11 @@
     var slider = $('wpDim');
     if (slider) slider.value = String(w.dim);
     $('wpDimVal').textContent = w.dim + '%';
-    $('wpState').textContent = w.kind === 'custom'
-      ? '当前：我的照片（存在本机，删掉 App 数据会丢）'
-      : (w.kind === 'preset' ? '当前：内置壁纸' : '当前：默认背景');
+    $('wpState').textContent = (s.wallpaper === 'custom' && !S.getWallpaperImage())
+      ? '⚠️ 你的自定义壁纸没保存住（上次大概空间不足），请重新点「选择照片」选一张'
+      : (w.kind === 'custom'
+        ? '当前：我的照片（已存本机；卸载 App 或清数据会丢）'
+        : (w.kind === 'preset' ? '当前：内置壁纸' : '当前：默认背景'));
   }
 
   function pickWallpaper(id) {
@@ -681,11 +683,16 @@
     var reader = new FileReader();
     reader.onload = function () {
       function save(data, note) {
-        S.setWallpaperImage(data);
-        S.saveSettings({ wallpaper: 'custom' });
-        renderWallpaperGrid();
-        applyWallpaper();
-        toast('壁纸已更新' + (note ? '（' + note + '）' : ''));
+        S.saveWallpaperImage(data).then(function (savedOk) {
+          if (!savedOk) {
+            toast('这张图没存住（空间不足），换一张小一点的吧');
+            return;
+          }
+          S.saveSettings({ wallpaper: 'custom' });
+          renderWallpaperGrid();
+          applyWallpaper();
+          toast('壁纸已保存' + (note ? '（' + note + '）' : ''));
+        });
       }
       var img = new Image();
       img.onload = function () {
@@ -1814,12 +1821,18 @@
 
     var saved = null;
     try { saved = localStorage.getItem('wb_view'); } catch (e) { /* ignore */ }
-    showView(saved && ['home', 'tasks', 'stats', 'mine'].indexOf(saved) >= 0 ? saved : 'home');
+    showView(saved && ['home', 'tasks', 'course', 'stats', 'mine'].indexOf(saved) >= 0 ? saved : 'home');
 
     checkReminders();
     setInterval(checkReminders, 60 * 1000);
     syncNativeNotifications();
     checkUpdateAuto();   // 启动时静默检查更新，有新版就弹窗
+
+    // 自定义壁纸存在 IndexedDB 里，异步读完再刷一次外观（否则会看不到自己的壁纸）
+    S.loadWallpaperImage().then(function () {
+      renderWallpaperGrid();
+      applyWallpaper();
+    });
 
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) { checkReminders(); renderAll(); checkUpdateAuto(); }

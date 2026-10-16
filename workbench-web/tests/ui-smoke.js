@@ -770,6 +770,30 @@ function injectApkInstaller(w) {
     if (st.indexOf('HTTP 401') < 0) throw new Error('失败时应显示状态码：' + st);
   });
 
+  await test('壁纸：自定义图能存住、重启后还在（不再悄悄丢）', async (w) => {
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8AARAAB/wD/AH8AAAAASUVORK5CYII=';
+    const savedOk = await w.WB.store.saveWallpaperImage(dataUrl);
+    if (!savedOk) throw new Error('保存自定义壁纸返回失败');
+    w.WB.store.saveSettings({ wallpaper: 'custom' });
+
+    // 模拟重启：内存缓存清空后重新加载
+    const back = await w.WB.store.loadWallpaperImage();
+    if (back !== dataUrl) throw new Error('重启后壁纸丢了：' + String(back).slice(0, 40));
+
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await sleep(60);
+    if (!w.document.body.classList.contains('wb-wallpaper')) throw new Error('重启后没有自动应用壁纸');
+    if ($(w, '#wpState').textContent.indexOf('⚠️') >= 0) throw new Error('存住了就不该再提示没保存住');
+
+    // 图真丢了（设置还写着 custom）→ 必须明确提示，而不是静默变回默认背景
+    await w.WB.store.saveWallpaperImage('');
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await sleep(60);
+    if ($(w, '#wpState').textContent.indexOf('没保存住') < 0) {
+      throw new Error('图丢了应该明确提示：' + $(w, '#wpState').textContent);
+    }
+  });
+
   console.log('\n通过 ' + pass + ' 项，失败 ' + failures.length + ' 项');
   if (failures.length) {
     failures.forEach((f) => console.log('  ✗ ' + f));
