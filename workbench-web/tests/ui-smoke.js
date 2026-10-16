@@ -110,8 +110,9 @@ function injectApkInstaller(w) {
 }
 
 (async function main() {
-  await test('启动：四个页签 + 首页空状态渲染', (w) => {
-    if ($$(w, '.tab').length !== 4) throw new Error('页签数量应为 4');
+  await test('启动：五个页签 + 首页空状态渲染', (w) => {
+    if ($$(w, '.tab').length !== 5) throw new Error('页签数量应为 5（工作台/任务/课表/统计/我的），实际 ' + $$(w, '.tab').length);
+    if (!$(w, '.tab[data-view="course"]')) throw new Error('缺少课表页签');
     if ($(w, '#view-home').hidden) throw new Error('默认应显示工作台');
     if ($$(w, '#homeGroups .tcard').length !== 0) throw new Error('初始不应有任务卡片');
     if (!$(w, '#homeGroups').textContent.includes('还没有任务')) throw new Error('缺少空状态');
@@ -594,6 +595,85 @@ function injectApkInstaller(w) {
     if ($(w, '#toast').hidden) throw new Error('提醒未触发页面提示');
     if (!$(w, '#toast').textContent.includes('该开会了')) throw new Error('提示内容不对');
     if (w.WB.store.getNotifiedKeys().length !== 1) throw new Error('提醒标记未记录');
+  });
+
+  await test('课表：网格渲染 + 粘贴导入（本地规则解析）', async (w) => {
+    click(w, $(w, '.tab[data-view="course"]'));
+    if ($(w, '#view-course').hidden) throw new Error('切不到课表页');
+    if (!$(w, '#courseGrid').children.length) throw new Error('课表网格没渲染');
+    if ($(w, '#courseToday').textContent.indexOf('没有课') < 0) throw new Error('今天应显示「没有课」');
+
+    click(w, $(w, '#courseImportBtn'));
+    if ($(w, '#sheetCourseImport').hidden) throw new Error('导入弹层没打开');
+    type(w, $(w, '#ciText'), '周一 1-2节 高等数学 教三101\n周三 5-6节 英语 外语楼302 1-16周\n乱写的一行');
+    click(w, $(w, '#ciParse'));
+    if ($(w, '#ciPreview').textContent.indexOf('识别到 2 门课') < 0) {
+      throw new Error('解析结果不对：' + $(w, '#ciPreview').textContent);
+    }
+    if ($(w, '#ciPreview').textContent.indexOf('没认出来') < 0) throw new Error('应提示有没认出来的行');
+    if ($(w, '#ciDo').disabled) throw new Error('解析出课程后导入按钮应可用');
+
+    click(w, $(w, '#ciDo'));
+    if (w.WB.store.getCourses().length !== 2) {
+      throw new Error('导入后课程数不对：' + w.WB.store.getCourses().length);
+    }
+    if ($(w, '#courseGrid').textContent.indexOf('高等数学') < 0) throw new Error('课表里没出现导入的课');
+    if ($(w, '#courseGrid').textContent.indexOf('教三101') < 0) throw new Error('课表格子里没显示教室');
+  });
+
+  await test('课表：手动添加 / 点格子编辑 / 删除', async (w) => {
+    click(w, $(w, '.tab[data-view="course"]'));
+    click(w, $(w, '#courseAddBtn'));
+    if ($(w, '#sheetCourse').hidden) throw new Error('课程弹层没打开');
+
+    type(w, $(w, '#cName'), '大学物理');
+    type(w, $(w, '#cRoom'), '实验楼B203');
+    click(w, $(w, '#cWeekdays').querySelector('[data-v="4"]'));
+    $(w, '#cStart').value = '3';
+    $(w, '#cEnd').value = '4';
+    click(w, $(w, '#cSave'));
+
+    const list = w.WB.store.getCourses();
+    if (list.length !== 1) throw new Error('没添加成功');
+    if (list[0].weekday !== 4 || list[0].startPeriod !== 3 || list[0].endPeriod !== 4 || list[0].room !== '实验楼B203') {
+      throw new Error('保存的字段不对：' + JSON.stringify(list[0]));
+    }
+
+    const cell = $(w, '#courseGrid').querySelector('[data-course]');
+    if (!cell) throw new Error('课表格子上没有课程块');
+    click(w, cell);
+    if ($(w, '#sheetCourse').hidden) throw new Error('点课程块没打开编辑');
+    if ($(w, '#cDelete').hidden) throw new Error('编辑时应该有删除按钮');
+    click(w, $(w, '#cDelete'));
+    if (w.WB.store.getCourses().length !== 0) throw new Error('删除没生效');
+  });
+
+  await test('外观：透明度 / 液态玻璃；轮盘：能抽出一个结果', async (w) => {
+    click(w, $(w, '.tab[data-view="mine"]'));
+    const op = $(w, '#opacityRange');
+    op.value = '70';
+    op.dispatchEvent(new w.Event('input', { bubbles: true }));
+    if (w.WB.store.getSettings().uiOpacity !== 70) throw new Error('透明度没存下来');
+    if (w.document.documentElement.style.getPropertyValue('--card-alpha').indexOf('0.7') < 0) {
+      throw new Error('透明度 CSS 变量没更新：' + w.document.documentElement.style.getPropertyValue('--card-alpha'));
+    }
+    const gs = $(w, '#glassSwitch');
+    gs.checked = true;
+    gs.dispatchEvent(new w.Event('change', { bubbles: true }));
+    if (!w.document.body.classList.contains('wb-glass')) throw new Error('液态玻璃没生效');
+    if (w.WB.store.getSettings().glass !== true) throw new Error('玻璃开关没存下来');
+
+    click(w, $(w, '.tab[data-view="home"]'));
+    click(w, $(w, '#openWheelBtn'));
+    if ($(w, '#sheetWheel').hidden) throw new Error('轮盘弹层没打开');
+    if (($(w, '#wheelOptions').value || '').indexOf('火锅') < 0) throw new Error('默认选项没填进输入框');
+
+    w.WB.store.setWheelOptions(['A', 'B', 'C']);
+    click(w, $(w, '#wheelSpin'));
+    await sleep(2900);
+    const res = $(w, '#wheelResult').textContent;
+    if (res.indexOf('结果：') !== 0) throw new Error('轮盘没出结果：' + res);
+    if ('ABC'.indexOf(res.replace('结果：', '')) < 0) throw new Error('结果不在选项里：' + res);
   });
 
   console.log('\n通过 ' + pass + ' 项，失败 ' + failures.length + ' 项');

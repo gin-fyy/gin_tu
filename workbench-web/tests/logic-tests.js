@@ -624,6 +624,80 @@ function makeCases(mode) {
     });
   };
 
+  cases['课表: 本地规则解析课表文字'] = (WB) => {
+    const r = WB.course.parseCourseText([
+      '周一 1-2节 高等数学 教三101',
+      '周二 3-4节 大学物理 @实验楼B203',
+      '周三 5节 英语 外语楼302 1-16周',
+      '周四 7-8 程序设计 计算机楼A401 单周',
+      '周五 9-10节 体育 操场 1-8周 双周',
+      '这行什么信息都没有'
+    ].join('\n'));
+
+    eq(r.courses.length, 5);
+    eq(r.errors.length, 1);
+    eq(r.errors[0].line, 6);
+
+    const math = r.courses[0];
+    eq(math.name, '高等数学');
+    eq(math.weekday, 1);
+    eq(math.startPeriod, 1);
+    eq(math.endPeriod, 2);
+    eq(math.room, '教三101');
+
+    eq(r.courses[1].name, '大学物理');
+    eq(r.courses[1].room, '实验楼B203');
+    eq(r.courses[1].weekday, 2);
+
+    const en = r.courses[2];
+    eq(en.name, '英语');
+    eq(en.startPeriod, 5);
+    eq(en.endPeriod, 5);
+    eq(en.weekFrom, 1);
+    eq(en.weekTo, 16);
+    eq(en.room, '外语楼302');
+
+    const code = r.courses[3];
+    eq(code.name, '程序设计');
+    eq(code.weekday, 4);
+    eq(code.startPeriod, 7);
+    eq(code.endPeriod, 8);
+    eq(code.parity, 'odd');
+
+    const pe = r.courses[4];
+    eq(pe.name, '体育');
+    eq(pe.room, '操场');
+    eq(pe.weekTo, 8);
+    eq(pe.parity, 'even');
+  };
+
+  cases['课表: 周次计算与某天的课'] = (WB) => {
+    eq(WB.course.mondayOf('2026-09-09'), '2026-09-07');   // 周三 → 本周一
+    eq(WB.course.mondayOf('2026-09-13'), '2026-09-07');   // 周日 → 上周一
+    eq(WB.course.weekOf('2026-09-07', '2026-09-07'), 1);
+    eq(WB.course.weekOf('2026-09-13', '2026-09-07'), 1);
+    eq(WB.course.weekOf('2026-09-14', '2026-09-07'), 2);
+    eq(WB.course.weekOf('2026-09-21', '2026-09-07'), 3);
+
+    const start = '2026-09-07';
+    const courses = [
+      { id: 'a', name: 'A', weekday: 1, startPeriod: 1, endPeriod: 2, weekFrom: 1, weekTo: 16, parity: 'all' },
+      { id: 'b', name: 'B', weekday: 1, startPeriod: 3, endPeriod: 4, weekFrom: 1, weekTo: 16, parity: 'odd' },
+      { id: 'c', name: 'C', weekday: 2, startPeriod: 1, endPeriod: 2, weekFrom: 1, weekTo: 4, parity: 'all' }
+    ];
+    eq(WB.course.coursesOn(courses, 1, 1).map((c) => c.name).join(','), 'A,B');
+    eq(WB.course.coursesOn(courses, 1, 2).map((c) => c.name).join(','), 'A');   // B 是单周
+    eq(WB.course.coursesOn(courses, 1, 3).map((c) => c.name).join(','), 'A,B');
+    eq(WB.course.coursesOn(courses, 2, 5).length, 0);                            // C 只上到第 4 周
+    eq(WB.course.coursesOnDate(courses, '2026-09-07', start).length, 2);         // 第 1 周周一
+    eq(WB.course.coursesOnDate(courses, '2026-09-14', start).length, 1);         // 第 2 周周一只有 A
+    eq(WB.course.periodLabel({ startPeriod: 3, endPeriod: 4 }), '第 3-4 节');
+    eq(WB.course.periodLabel({ startPeriod: 5 }), '第 5 节');
+    ok(WB.course.periodTime(1).indexOf('08:00') === 0, '第 1 节时间：' + WB.course.periodTime(1));
+    eq(WB.course.courseWeeksLabel({ weekFrom: 1, weekTo: 8, parity: 'even' }), '1-8 周（双周）');
+    eq(WB.course.courseWeeksLabel({ weekFrom: 1, weekTo: 16, parity: 'all' }), '1-16 周');
+  };
+
   return cases;
 }
 
