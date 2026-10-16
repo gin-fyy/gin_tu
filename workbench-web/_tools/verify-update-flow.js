@@ -17,7 +17,9 @@ const crypto = require('crypto');
 const WB = require(path.join(__dirname, '..', 'www', 'js', 'core.js'));
 
 const baseArg = process.argv.indexOf('--base');
-const BASE = (baseArg > -1 && process.argv[baseArg + 1]) || WB.DEFAULT_UPDATE_BASE;
+const BASES = (baseArg > -1 && process.argv[baseArg + 1])
+  ? WB.update.parseBases(process.argv[baseArg + 1])
+  : WB.update.parseBases(WB.DEFAULT_UPDATE_BASE);
 const CLIENT = { version: '1.1.3', versionCode: 3 };   // 模拟「已经装好 1.1.3 的手机」
 
 let fail = 0;
@@ -43,17 +45,38 @@ function get(url, opts, depth) {
 }
 
 (async function main() {
-  console.log('更新源：' + BASE);
-  console.log('模拟客户端：' + CLIENT.version + ' (' + CLIENT.versionCode + ')\n');
+  console.log('模拟客户端：' + CLIENT.version + ' (' + CLIENT.versionCode + ')');
+  console.log('要核对的更新源 ' + BASES.length + ' 个\n');
 
-  /* 1) 线上版本信息 */
-  const vr = await get(BASE.replace(/\/+$/, '') + '/update/version.json', { headers: { 'cache-control': 'no-cache' } });
-  if (vr.status !== 200) {
-    bad('读不到 version.json（HTTP ' + vr.status + '）');
+  /* 1) 逐个源读 version.json，然后按 App 的规则取「版本最新的那个」 */
+  const alive = [];
+  for (const b of BASES) {
+    const name = b.replace(/^https?:\/\//, '').slice(0, 46);
+    try {
+      const vr = await get(b.replace(/\/+$/, '') + '/update/version.json', { headers: { 'cache-control': 'no-cache' } });
+      if (vr.status !== 200) { bad(name + ' → HTTP ' + vr.status); continue; }
+      const remote = JSON.parse(vr.body.toString('utf8'));
+      alive.push({ base: b, remote: remote });
+      console.log('  ' + String(remote.version).padEnd(8) + ' ← ' + name);
+    } catch (e) {
+      console.log('  (连不上) ← ' + name + '  ' + (e.message || e));
+    }
+  }
+  if (!alive.length) {
+    bad('所有源都读不到 version.json');
     process.exit(1);
   }
-  const remote = JSON.parse(vr.body.toString('utf8'));
-  ok('读到线上版本：' + remote.version + ' (' + remote.versionCode + ')，' + (remote.size / 1048576).toFixed(2) + ' MB');
+  const best = WB.update.pickNewest(alive);
+  const remote = best.remote;
+  ok('可用源 ' + alive.length + ' 个；App 会取最新的：' + remote.version + ' (' + remote.versionCode + ') ← ' + best.base.replace(/^https?:\/\//, '').slice(0, 40));
+
+  /* 1b) 这个「最新版本」必须等于我刚发布的（本地 docs/update/version.json） */
+  const localPublished = path.join(__dirname, '..', '..', 'docs', 'update', 'version.json');
+  if (fs.existsSync(localPublished)) {
+    const local = JSON.parse(fs.readFileSync(localPublished, 'utf8'));
+    if (local.version === remote.version) ok('线上最新版本 == 刚发布的版本（' + local.version + '）');
+    else bad('线上最新是 ' + remote.version + '，但本地发布目录是 ' + local.version + ' → docs/ 没同步上去（发布步骤失败过）');
+  }
 
   /* 2) 更新日志 */
   const notes = WB.update.notesOf(remote);
@@ -65,8 +88,8 @@ function get(url, opts, depth) {
   }
 
   /* 3) 旧版客户端会不会看到更新 */
-  const res = WB.update.evaluate(CLIENT, remote, BASE);
-  if (res.hasUpdate) ok('客户端判定：有更新 → ' + res.latestVersion + '（版本号比较：' + CLIENT.version + ' → ' + res.latestVersion + '）');
+  const res = WB.update.evaluate(CLIENT, remote, best.base);
+  if (res.hasUpdate) ok('客户端判定：有更新 → ' + res.latestVersion + '（' + CLIENT.version + ' → ' + res.latestVersion + '）');
   else bad('客户端判定：没有更新（弹窗不会出现）→ 检查 versionCode 是否真的变大了');
   if (res.apkUrl && res.apkUrl.indexOf('http') === 0) ok('安装包地址：' + res.apkUrl);
   else bad('安装包地址拼接不对：' + res.apkUrl);

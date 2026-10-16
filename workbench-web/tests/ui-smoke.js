@@ -676,6 +676,56 @@ function injectApkInstaller(w) {
     if ('ABC'.indexOf(res.replace('结果：', '')) < 0) throw new Error('结果不在选项里：' + res);
   });
 
+  await test('课表：图片识别（AI）出预览并导入', async (w) => {
+    click(w, $(w, '.tab[data-view="course"]'));
+    click(w, $(w, '#courseImportBtn'));
+    if ($(w, '#sheetCourseImport').hidden) throw new Error('导入弹层没打开');
+
+    // 没配 Key 时：应引导去配置（展开 AI 配置），而不是报错
+    if (!$(w, '#aiCfg').hidden) $(w, '#aiToggleAi');
+    click(w, $(w, '#ciImageBtn'));
+    if ($(w, '#aiCfg').hidden) throw new Error('没配 Key 时应展开 AI 配置并提示');
+
+    type(w, $(w, '#aiKey'), 'test-key-123456');
+    click(w, $(w, '#aiSave'));
+    if (w.WB.store.getSettings().aiKey !== 'test-key-123456') throw new Error('AI Key 没存下来');
+
+    let sent = null;
+    w.fetch = (url, opts) => {
+      sent = { url: String(url), body: JSON.parse((opts && opts.body) || '{}') };
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify({
+          choices: [{ message: { content: '```json\n[{"name":"线性代数","weekday":2,"startPeriod":3,"endPeriod":4,"room":"教二201","weekFrom":1,"weekTo":16}]\n```' } }]
+        }))
+      });
+    };
+
+    const input = $(w, '#ciImage');
+    const file = new w.File([new w.Uint8Array([137, 80, 78, 71])], 'tt.png', { type: 'image/png' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    input.dispatchEvent(new w.Event('change', { bubbles: true }));
+    await sleep(2200);   // 等图片解码兜底（1.5s）+ 解析
+
+    if (!sent) throw new Error('没有调用 AI 接口');
+    if (sent.url.indexOf('bigmodel.cn') < 0) throw new Error('接口地址不对：' + sent.url);
+    const content = sent.body.messages && sent.body.messages[0] && sent.body.messages[0].content;
+    if (!content || content[1].type !== 'image_url' || String(content[1].image_url.url).indexOf('data:image') !== 0) {
+      throw new Error('请求体不是视觉模型格式：' + JSON.stringify(content).slice(0, 120));
+    }
+    if ($(w, '#ciPreview').textContent.indexOf('线性代数') < 0) {
+      throw new Error('预览里没有识别结果：' + $(w, '#ciPreview').textContent);
+    }
+    if ($(w, '#ciDo').disabled) throw new Error('识别出课程后导入按钮应可用');
+
+    click(w, $(w, '#ciDo'));
+    const list = w.WB.store.getCourses();
+    if (list.length !== 1) throw new Error('图片识别的课程没导入：' + list.length);
+    if (list[0].name !== '线性代数' || list[0].weekday !== 2 || list[0].room !== '教二201') {
+      throw new Error('导入的课程字段不对：' + JSON.stringify(list[0]));
+    }
+  });
+
   console.log('\n通过 ' + pass + ' 项，失败 ' + failures.length + ' 项');
   if (failures.length) {
     failures.forEach((f) => console.log('  ✗ ' + f));

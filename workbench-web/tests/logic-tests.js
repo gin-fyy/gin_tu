@@ -698,6 +698,57 @@ function makeCases(mode) {
     eq(WB.course.courseWeeksLabel({ weekFrom: 1, weekTo: 16, parity: 'all' }), '1-16 周');
   };
 
+  cases['课表: AI 图片识别的返回要能容错解析'] = (WB) => {
+    // 正常：```json 包裹
+    let r = WB.coursesFromAiText('```json\n[{"name":"线性代数","weekday":2,"startPeriod":3,"endPeriod":4,"room":"教二201","weekFrom":1,"weekTo":16,"parity":"all"}]\n```');
+    eq(r.courses.length, 1);
+    eq(r.courses[0].name, '线性代数');
+    eq(r.courses[0].weekday, 2);
+    eq(r.courses[0].startPeriod, 3);
+    eq(r.courses[0].endPeriod, 4);
+    eq(r.courses[0].room, '教二201');
+    eq(r.courses[0].weekTo, 16);
+
+    // 前后有废话也能抠出数组
+    r = WB.coursesFromAiText('好的，我识别到：[{"name":"英语","weekday":3,"startPeriod":5,"endPeriod":6}] 希望有帮助！');
+    eq(r.courses.length, 1);
+    eq(r.courses[0].name, '英语');
+    eq(r.courses[0].weekday, 3);
+
+    // 只返回一个对象（没包成数组）
+    r = WB.coursesFromAiText('{"name":"体育","weekday":5,"startPeriod":9,"endPeriod":10,"room":"操场"}');
+    eq(r.courses.length, 1);
+    eq(r.courses[0].room, '操场');
+
+    // 中文字段名 / 变体字段名
+    r = WB.coursesFromAiText('[{"课程":"高等数学","星期":"周一","开始节":1,"结束节":2,"地点":"教三101","教师":"张老师"}]');
+    eq(r.courses.length, 1);
+    eq(r.courses[0].name, '高等数学');
+    eq(r.courses[0].weekday, 1);
+    eq(r.courses[0].startPeriod, 1);
+    eq(r.courses[0].room, '教三101');
+    eq(r.courses[0].teacher, '张老师');
+
+    // 单双周 + 越界钳制 + 结束节小于开始节要纠正
+    r = WB.coursesFromAiText('[{"name":"A","weekday":9,"startPeriod":30,"endPeriod":1,"parity":"单周"},{"name":"B","parity":"双周"},{"name":"C","parity":"每周"}]');
+    eq(r.courses[0].weekday, 7);
+    eq(r.courses[0].startPeriod, 12);
+    eq(r.courses[0].endPeriod, 12);
+    eq(r.courses[0].parity, 'odd');
+    eq(r.courses[1].parity, 'even');
+    eq(r.courses[2].parity, 'all');
+
+    // 没名字的条目丢掉
+    r = WB.coursesFromAiText('[{"weekday":1},{"name":"   "},{"name":"保留"}]');
+    eq(r.courses.length, 1);
+    eq(r.courses[0].name, '保留');
+
+    // 完全不是 JSON：给明确错误，而不是崩
+    r = WB.coursesFromAiText('这张图我看不清');
+    eq(r.courses.length, 0);
+    ok(!!r.error, '应该有错误提示：' + r.error);
+  };
+
   return cases;
 }
 

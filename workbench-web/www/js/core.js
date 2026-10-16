@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.3.0';
+  var APP_VERSION = '1.3.1';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -368,7 +368,10 @@
         uiOpacity: 100,     // 界面（卡片）不透明度 %
         glass: false,       // 液态玻璃效果
         glassBlur: 18,      // 玻璃模糊强度 px
-        wheelSource: 'custom' // 转盘选项来源：custom | tasks
+        wheelSource: 'custom', // 转盘选项来源：custom | tasks
+        aiEndpoint: AI_DEFAULT_ENDPOINT,  // 图片识别课表的视觉模型接口
+        aiModel: AI_DEFAULT_MODEL,
+        aiKey: ''                          // 只存在本机，不会上传到别处
       },
       read(KEY_SETTINGS, {})
     );
@@ -421,8 +424,98 @@
   }
 
   /* ===================== 课表 ===================== */
+  // 图片识别课表用的视觉模型（OpenAI 兼容接口；智谱 glm-4v-flash 有免费额度）
   var KEY_COURSES = 'wb_courses';
   var KEY_WHEEL = 'wb_wheel';
+  var AI_DEFAULT_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+  var AI_DEFAULT_MODEL = 'glm-4v-flash';
+  var AI_PROMPT = [
+    '你是课表识别助手。请仔细看这张课表图片，把里面所有课程读出来。',
+    '只输出一个 JSON 数组，不要任何解释文字，不要 markdown 代码块。',
+    '每门课一条，字段如下：',
+    '{"name":"课程名","weekday":1,"startPeriod":1,"endPeriod":2,"room":"上课地点","teacher":"教师","weekFrom":1,"weekTo":20,"parity":"all"}',
+    '说明：weekday 用 1-7 表示周一到周日；startPeriod/endPeriod 是第几节（数字）；',
+    'weekFrom/weekTo 是起止周（看不出就填 1 和 20）；parity 取 all（每周）/odd（单周）/even（双周）；',
+    '没有的信息用空字符串或默认值，不要编造。'
+  ].join('\n');
+
+  // 从 AI 回复里取出课程数组（容忍 ```json 包裹、前后有废话、字段名变体）
+  function coursesFromAiText(text) {
+    var raw = String(text || '');
+    var jsonText = '';
+    var fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence) {
+      jsonText = fence[1];
+    } else {
+      var a = raw.indexOf('[');
+      var b = raw.lastIndexOf(']');
+      if (a >= 0 && b > a) jsonText = raw.slice(a, b + 1);
+      else {
+        var c = raw.indexOf('{');
+        var d = raw.lastIndexOf('}');
+        if (c >= 0 && d > c) jsonText = '[' + raw.slice(c, d + 1) + ']';
+      }
+    }
+
+    var arr = null;
+    try { arr = JSON.parse(jsonText); } catch (e) {
+      return { courses: [], error: 'AI 返回的不是合法 JSON（可以让它重拍/重试）' };
+    }
+    if (arr && !Array.isArray(arr)) {
+      arr = (arr.courses && Array.isArray(arr.courses)) ? arr.courses : [arr];
+    }
+    if (!Array.isArray(arr)) return { courses: [], error: 'AI 返回格式不对' };
+
+    var WD = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 };
+    function wdOf(v) {
+      if (typeof v === 'number' && isFinite(v)) return Math.max(1, Math.min(7, Math.round(v)));
+      var s = String(v === undefined || v === null ? '' : v).trim();
+      var m = s.match(/[1-7]/);
+      if (m) return Number(m[0]);
+      var ch = s.replace(/周|星期|礼拜/g, '').charAt(0);
+      if (WD[ch]) return WD[ch];
+      var low = s.toLowerCase().slice(0, 3);
+      if (WD[low]) return WD[low];
+      return 1;
+    }
+    function num(v, dflt, lo, hi) {
+      var n = Number(v);
+      if (!isFinite(n) || n === 0) n = dflt;
+      return Math.max(lo, Math.min(hi, Math.round(n)));
+    }
+    function pick(o, keys) {
+      for (var i = 0; i < keys.length; i++) {
+        if (o[keys[i]] !== undefined && o[keys[i]] !== null && o[keys[i]] !== '') return o[keys[i]];
+      }
+      return '';
+    }
+
+    var out = [];
+    arr.forEach(function (o) {
+      if (!o || typeof o !== 'object') return;
+      var name = String(pick(o, ['name', 'title', 'course', '课程', '课程名']) || '').trim();
+      if (!name) return;
+      var parityRaw = String(pick(o, ['parity', 'weekType', 'week_type', '单双周']) || '').toLowerCase();
+      var sp = num(pick(o, ['startPeriod', 'start', 'start_period', '开始节']), 1, 1, 12);
+      var ep = num(pick(o, ['endPeriod', 'end', 'end_period', '结束节']), sp, 1, 12);
+      if (ep < sp) ep = sp;
+      out.push({
+        name: name,
+        teacher: String(pick(o, ['teacher', '教师', '老师']) || '').trim(),
+        room: String(pick(o, ['room', 'location', 'place', '地点', '教室']) || '').trim(),
+        weekday: wdOf(pick(o, ['weekday', 'day', 'week_day', '星期', '周几'])),
+        startPeriod: sp,
+        endPeriod: ep,
+        weekFrom: num(pick(o, ['weekFrom', 'from', 'startWeek', '起始周']), 1, 1, 30),
+        weekTo: num(pick(o, ['weekTo', 'to', 'endWeek', '结束周']), 20, 1, 30),
+        parity: /odd|单/.test(parityRaw) ? 'odd' : (/even|双/.test(parityRaw) ? 'even' : 'all')
+      });
+    });
+    return {
+      courses: out,
+      error: out.length ? '' : '没识别出课程（图片可能太糊，或者课表样式太特殊）'
+    };
+  }
 
   var DEFAULT_WHEEL = ['火锅', '麻辣烫', '盖浇饭', '面条', '汉堡', '随便吃点'];
 
@@ -1028,6 +1121,10 @@
     wallpaperCss: wallpaperCss,
     DEFAULT_WHEEL: DEFAULT_WHEEL,
     wheelPick: wheelPick,
+    AI_DEFAULT_ENDPOINT: AI_DEFAULT_ENDPOINT,
+    AI_DEFAULT_MODEL: AI_DEFAULT_MODEL,
+    AI_PROMPT: AI_PROMPT,
+    coursesFromAiText: coursesFromAiText,
     course: {
       DEFAULT_PERIODS: DEFAULT_PERIODS,
       WEEKDAY_LABELS: WEEKDAY_LABELS,

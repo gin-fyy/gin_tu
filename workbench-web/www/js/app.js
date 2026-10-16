@@ -904,30 +904,156 @@
     $('ciPreview').innerHTML = '';
     $('ciDo').disabled = true;
     $('ciDo').textContent = '导入';
+    $('aiCfg').hidden = true;
+    fillAiConfig();
     openSheet('courseImport');
   }
 
-  function parseImportText() {
-    var r = C.parseCourseText($('ciText').value || '');
+  function renderImportPreview(r, fromImage) {
     importPreview = r;
     var html = '';
     if (r.courses.length) {
-      html += '<div class="tip">识别到 ' + r.courses.length + ' 门课：</div>';
+      html += '<div class="tip">' + (fromImage ? 'AI 识别到 ' : '识别到 ') + r.courses.length + ' 门课（确认没问题再点下面的导入）：</div>';
       html += r.courses.map(function (c) {
         return '<div class="ci-preview">' + C.WEEKDAY_LABELS[c.weekday - 1] + ' ' + C.periodLabel(c) + ' · ' + esc(c.name) +
           (c.room ? ' · ' + esc(c.room) : '') + ' · ' + C.courseWeeksLabel(c) + '</div>';
       }).join('');
     }
-    if (r.errors.length) {
+    if (r.errors && r.errors.length) {
       html += '<div class="tip" style="margin-top:10px">有 ' + r.errors.length + ' 行没认出来（可以改改再解析，或手动添加）：</div>';
       html += r.errors.map(function (e) {
         return '<div class="ci-error">第 ' + e.line + ' 行：' + esc(e.text) + '</div>';
       }).join('');
     }
-    if (!r.courses.length && !r.errors.length) html = '<div class="tip">还没输入内容。</div>';
+    if (r.error) html += '<div class="ci-error">' + esc(r.error) + '</div>';
+    if (!r.courses.length && !(r.errors && r.errors.length) && !r.error) html = '<div class="tip">还没输入内容。</div>';
+
     $('ciPreview').innerHTML = html;
     $('ciDo').disabled = !r.courses.length;
     $('ciDo').textContent = r.courses.length ? ('导入这 ' + r.courses.length + ' 门课') : '导入';
+  }
+
+  function parseImportText() {
+    renderImportPreview(C.parseCourseText($('ciText').value || ''), false);
+  }
+
+  /* ---------- 图片识别课表（视觉大模型；Key 只存本机） ---------- */
+  function aiKeyOf() { return String(S.getSettings().aiKey || '').trim(); }
+
+  function fillAiConfig() {
+    var s = S.getSettings();
+    $('aiEndpoint').value = s.aiEndpoint || window.WB.AI_DEFAULT_ENDPOINT;
+    $('aiModel').value = s.aiModel || window.WB.AI_DEFAULT_MODEL;
+    var key = aiKeyOf();
+    $('aiKey').value = key ? ('已保存 ' + '•'.repeat(Math.max(4, Math.min(12, key.length - 4))) + key.slice(-4)) : '';
+    $('aiState').textContent = key
+      ? '✓ 已配置 AI，可以点「选图片识别」（拍/选一张课表截图）'
+      : '还没配置 AI：图片识别需要它；不想配也可以直接用下面的文字导入。';
+  }
+
+  function saveAiConfig() {
+    var key = ($('aiKey').value || '').trim();
+    var patch = {
+      aiEndpoint: ($('aiEndpoint').value || '').trim() || window.WB.AI_DEFAULT_ENDPOINT,
+      aiModel: ($('aiModel').value || '').trim() || window.WB.AI_DEFAULT_MODEL
+    };
+    if (!key) patch.aiKey = '';
+    else if (key.indexOf('已保存') !== 0 && key.indexOf('•') !== 0) patch.aiKey = key;
+    S.saveSettings(patch);
+    fillAiConfig();
+    toast(aiKeyOf() ? 'AI 配置已保存' : '已清空 AI Key');
+  }
+
+  // 压缩图片，避免上传太大、也省流量（解码不出来就直接用原图，绝不卡住）
+  function compressImage(dataUrl, maxW, quality, cb) {
+    var done = false;
+    var timer = setTimeout(function () { finish(dataUrl); }, 1500);
+    function finish(out) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      cb(out);
+    }
+    try {
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var scale = Math.min(1, maxW / (img.width || maxW));
+          var w = Math.max(1, Math.round((img.width || maxW) * scale));
+          var h = Math.max(1, Math.round((img.height || maxW) * scale));
+          var cv = document.createElement('canvas');
+          cv.width = w;
+          cv.height = h;
+          var ctx = cv.getContext('2d');
+          if (!ctx) throw new Error('no-canvas');
+          ctx.drawImage(img, 0, 0, w, h);
+          finish(cv.toDataURL('image/jpeg', quality));
+        } catch (e) { finish(dataUrl); }
+      };
+      img.onerror = function () { finish(dataUrl); };
+      img.src = dataUrl;
+    } catch (e) { finish(dataUrl); }
+  }
+
+  function callAiVision(dataUrl) {
+    var s = S.getSettings();
+    var key = aiKeyOf();
+    if (!key) return Promise.reject(new Error('没有配置 AI Key'));
+    var body = {
+      model: (s.aiModel || window.WB.AI_DEFAULT_MODEL).trim(),
+      temperature: 0.1,
+      stream: false,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: window.WB.AI_PROMPT },
+          { type: 'image_url', image_url: { url: dataUrl } }
+        ]
+      }]
+    };
+    return fetch((s.aiEndpoint || window.WB.AI_DEFAULT_ENDPOINT).trim(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        if (!r.ok) throw new Error('AI 接口 HTTP ' + r.status + '：' + String(t).slice(0, 140));
+        var j = null;
+        try { j = JSON.parse(t); } catch (e) { throw new Error('AI 返回不是 JSON'); }
+        var c = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+        if (Array.isArray(c)) c = c.map(function (p) { return p && p.text ? p.text : ''; }).join('');
+        if (!c) throw new Error('AI 返回里没有内容');
+        return String(c);
+      });
+    });
+  }
+
+  function onCourseImageFile(file) {
+    if (!file) return;
+    if (!aiKeyOf()) {
+      toast('先点「AI 配置」填一个 Key，图片识别要用它');
+      $('aiCfg').hidden = false;
+      return;
+    }
+    if (!/^image\//.test(file.type || '')) { toast('请选一张图片'); return; }
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      $('ciPreview').innerHTML = '<div class="tip">正在压缩图片…</div>';
+      compressImage(String(reader.result || ''), 1400, 0.85, function (small) {
+        $('ciPreview').innerHTML = '<div class="tip">正在让 AI 读课表（大概几秒到十几秒）…</div>';
+        callAiVision(small).then(function (text) {
+          var r = window.WB.coursesFromAiText(text);
+          renderImportPreview(r, true);
+          toast(r.courses.length ? ('识别到 ' + r.courses.length + ' 门课') : (r.error || '没识别出课程'));
+        }).catch(function (e) {
+          $('ciPreview').innerHTML = '<div class="ci-error">图片识别失败：' +
+            esc(e && e.message ? e.message : String(e)) + '</div>';
+        });
+      });
+    };
+    reader.onerror = function () { toast('读取图片失败'); };
+    reader.readAsDataURL(file);
   }
 
   function doCourseImport() {
@@ -1453,6 +1579,22 @@
     $('ciClose').addEventListener('click', function () { closeSheet(); });
     $('ciParse').addEventListener('click', parseImportText);
     $('ciDo').addEventListener('click', doCourseImport);
+    $('ciToggleAi').addEventListener('click', function () { $('aiCfg').hidden = !$('aiCfg').hidden; });
+    $('aiSave').addEventListener('click', saveAiConfig);
+    $('ciImageBtn').addEventListener('click', function () {
+      if (!aiKeyOf()) {
+        $('aiCfg').hidden = false;
+        fillAiConfig();
+        toast('先在下面填一个 AI Key（推荐智谱 glm-4v-flash，有免费额度）');
+        return;
+      }
+      $('ciImage').click();
+    });
+    $('ciImage').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0];
+      onCourseImageFile(f);
+      e.target.value = '';
+    });
 
     // 外观
     $('opacityRange').addEventListener('input', function (e) {

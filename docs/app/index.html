@@ -423,6 +423,32 @@
     </div>
     <div class="sheet-body">
       <div class="tip">一行一门课：<b>周几 + 节次 + 课程名</b>（地点、周次、单双周可选）。识别不了的行会单独列出来，你手改一下即可。</div>
+      <div class="row" style="margin-top:10px">
+        <button class="mini-btn" id="ciImageBtn">📷 选图片识别</button>
+        <button class="mini-btn ghost" id="ciToggleAi">AI 配置</button>
+      </div>
+      <input type="file" id="ciImage" accept="image/*" hidden />
+      <div class="tip" id="aiState" style="margin-top:8px"></div>
+
+      <div id="aiCfg" hidden style="margin-top:6px">
+        <div class="tip">图片识别需要一个视觉大模型（OpenAI 兼容接口）。推荐<b>智谱 glm-4v-flash</b>（有免费额度）：到 bigmodel.cn 注册 → 拿 API Key → 填在下面。Key 只存在你本机。</div>
+        <label class="field" style="margin-top:8px">
+          <span class="field-label">接口地址</span>
+          <input id="aiEndpoint" placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions" />
+        </label>
+        <label class="field">
+          <span class="field-label">模型</span>
+          <input id="aiModel" placeholder="glm-4v-flash" />
+        </label>
+        <label class="field">
+          <span class="field-label">API Key</span>
+          <input id="aiKey" placeholder="粘贴你的 Key（只存本机）" />
+        </label>
+        <div class="row">
+          <button class="mini-btn" id="aiSave">保存 AI 配置</button>
+        </div>
+      </div>
+
       <textarea id="ciText" rows="8" placeholder="周一 1-2节 高等数学 教三101&#10;周二 3-4节 大学物理 @实验楼B203&#10;周三 5-6节 英语 外语楼302 1-16周"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="mini-btn" id="ciParse">解析看看</button>
