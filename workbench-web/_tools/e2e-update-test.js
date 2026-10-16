@@ -117,6 +117,15 @@ async function main() {
     }
   };
 
+  /* 0) 可选：在 App 启动前把「更新地址」写进本地设置，
+        这样走的就是手机上真实的那条路径：启动 → 自动检查 → 弹窗 */
+  const baseArg = argOf('--base', '');
+  if (baseArg) {
+    const list = baseArg.split(',').join('\n');
+    w.localStorage.setItem('wb_settings', JSON.stringify({ updateBase: list }));
+    info('更新地址（启动前写入设置）：' + baseArg.replace(/,/g, ' , '));
+  }
+
   w.eval(coreSrc);
   w.eval(appSrc);
   await sleep(60);
@@ -154,7 +163,7 @@ async function main() {
   }
 
   if (dl.installed) {
-    ok('下载完成：' + (dl.bytes / 1048576).toFixed(2) + ' MB，用时 ' + (dl.ms / 1000).toFixed(1) + ' 秒（' + (dl.bytes / 1024 / Math.max(dl.ms, 1)).toFixed(0) + ' KB/s）');
+    ok('下载完成：' + (dl.bytes / 1048576).toFixed(2) + ' MB，用时 ' + (dl.ms / 1000).toFixed(1) + ' 秒（' + (dl.bytes / 1024 / Math.max(dl.ms / 1000, 0.001)).toFixed(0) + ' KB/s）');
     ok('下载源：' + dl.url.replace(/^https?:\/\//, '').slice(0, 70));
     ok('sha256 校验通过（' + dl.hash.slice(0, 16) + '…）');
     ok('已拉起安装（模拟）：' + dl.installed);
