@@ -749,6 +749,41 @@ function makeCases(mode) {
     ok(!!r.error, '应该有错误提示：' + r.error);
   };
 
+  cases['课表: 模型手抖的 JSON 也要能修好（真实案例）'] = (WB) => {
+    // 这是 glm-4v-flash 真实返回过的内容：把 "teacher","" 的冒号写成了逗号，还夹了换行
+    const broken = [
+      '```json',
+      '[',
+      '    {"name":"高等数学", "weekday":1, "startPeriod":1, "endPeriod":2, "room":"教三101", "teacher":"张伟", "weekFrom":1, "weekTo":20, "parity":"all"},',
+      '    {"name":"线性代数", "weekday":2, "startPeriod":1, "endPeriod":2, "room":"教二201", "teacher","", "weekFrom":1, "weekTo":20, "parity":"all"},',
+      '    {"name":"体育", "weekday":4, "startPeriod":1, "endPeriod":2, "room":"田径场", "teacher":"",',
+      '     "weekFrom":1, "weekTo":20, "parity":"all"}',
+      ']',
+      '```'
+    ].join('\n');
+
+    const r = WB.coursesFromAiText(broken);
+    eq(r.courses.length, 3);
+    eq(r.courses[0].name, '高等数学');
+    eq(r.courses[1].name, '线性代数');
+    eq(r.courses[1].room, '教二201');
+    eq(r.courses[2].name, '体育');
+    eq(r.courses[2].weekday, 4);
+    eq(r.courses[2].room, '田径场');
+    eq(r.error, '');
+
+    // 模型改用纯文字列课表（完全不是 JSON）→ 退回按行解析
+    const plain = WB.coursesFromAiText('周一 1-2节 高等数学 教三101\n周三 5-6节 英语 外语楼302');
+    eq(plain.courses.length, 2);
+    eq(plain.courses[0].name, '高等数学');
+    eq(plain.courses[1].room, '外语楼302');
+
+    // 结尾多逗号
+    const trailing = WB.coursesFromAiText('[{"name":"A","weekday":1,"startPeriod":1,"endPeriod":2},]');
+    eq(trailing.courses.length, 1);
+    eq(trailing.courses[0].name, 'A');
+  };
+
   return cases;
 }
 

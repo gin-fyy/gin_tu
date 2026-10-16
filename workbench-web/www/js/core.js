@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.3.1';
+  var APP_VERSION = '1.3.2';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -430,41 +430,87 @@
   var AI_DEFAULT_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
   var AI_DEFAULT_MODEL = 'glm-4v-flash';
   var AI_PROMPT = [
-    '你是课表识别助手。请仔细看这张课表图片，把里面所有课程读出来。',
+    '你是课表识别助手。请逐行逐列扫描这张课表的每一个格子，不要遗漏任何一门课（很容易漏掉某些格子，请仔细核对）。',
+    '课程名称严格照抄图片里的文字，不要自己扩写、补充或推断（例如图上写「大学物理」就写「大学物理」）。',
     '只输出一个 JSON 数组，不要任何解释文字，不要 markdown 代码块。',
     '每门课一条，字段如下：',
     '{"name":"课程名","weekday":1,"startPeriod":1,"endPeriod":2,"room":"上课地点","teacher":"教师","weekFrom":1,"weekTo":20,"parity":"all"}',
-    '说明：weekday 用 1-7 表示周一到周日；startPeriod/endPeriod 是第几节（数字）；',
+    '说明：weekday 用 1-7 表示周一到周日；startPeriod/endPeriod 是第几节（数字，单元格标注「1-2 节」就填 1 和 2）；',
     'weekFrom/weekTo 是起止周（看不出就填 1 和 20）；parity 取 all（每周）/odd（单周）/even（双周）；',
     '没有的信息用空字符串或默认值，不要编造。'
   ].join('\n');
 
-  // 从 AI 回复里取出课程数组（容忍 ```json 包裹、前后有废话、字段名变体）
+  // 从 AI 回复里抠出 JSON 片段（容忍 ```json 包裹、前后有废话）
+  function extractJsonish(raw) {
+    var s = String(raw || '');
+    var fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence) return fence[1];
+    var a = s.indexOf('[');
+    var b = s.lastIndexOf(']');
+    if (a >= 0 && b > a) return s.slice(a, b + 1);
+    var c = s.indexOf('{');
+    var d = s.lastIndexOf('}');
+    if (c >= 0 && d > c) return '[' + s.slice(c, d + 1) + ']';
+    return '';
+  }
+
+  var AI_FIELDS = ['name', 'title', 'course', 'weekday', 'day', 'startPeriod', 'start', 'endPeriod', 'end',
+    'room', 'location', 'teacher', 'weekFrom', 'from', 'weekTo', 'to', 'parity', 'weekType',
+    '课程', '课程名', '星期', '周几', '地点', '教室', '教师', '老师', '开始节', '结束节', '起始周', '结束周', '单双周'];
+
+  // 小模型常见的 JSON 手抖：键值之间写成逗号（"teacher",""）、结尾多逗号
+  function repairJsonText(s) {
+    var t = String(s || '');
+    AI_FIELDS.forEach(function (f) {
+      t = t.replace(new RegExp('"' + f + '"\\s*[,，]\\s*(?="|\\d|true|false|null)', 'g'), '"' + f + '": ');
+    });
+    t = t.replace(/,\s*([}\]])/g, '$1');
+    return t;
+  }
+
+  // 连修都修不好：直接按 "{...}" 块 + 字段正则硬抠
+  function objectsFromLooseText(s) {
+    var blocks = String(s || '').match(/\{[^{}]*\}/g) || [];
+    var out = [];
+    blocks.forEach(function (b) {
+      var o = {};
+      var re = /"([^"]+)"\s*[:：,]\s*("([^"]*)"|-?\d+(?:\.\d+)?|true|false|null)/g;
+      var m;
+      while ((m = re.exec(b)) !== null) {
+        o[m[1]] = (m[3] !== undefined) ? m[3] : m[2];
+      }
+      if (Object.keys(o).length) out.push(o);
+    });
+    return out;
+  }
+
+  // 从 AI 回复里取出课程数组（多重容错：标准 JSON → 修复后 JSON → 硬抠字段 → 按行文字解析）
   function coursesFromAiText(text) {
     var raw = String(text || '');
-    var jsonText = '';
-    var fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    if (fence) {
-      jsonText = fence[1];
-    } else {
-      var a = raw.indexOf('[');
-      var b = raw.lastIndexOf(']');
-      if (a >= 0 && b > a) jsonText = raw.slice(a, b + 1);
-      else {
-        var c = raw.indexOf('{');
-        var d = raw.lastIndexOf('}');
-        if (c >= 0 && d > c) jsonText = '[' + raw.slice(c, d + 1) + ']';
+    var jsonText = extractJsonish(raw);
+    var arr = null;
+
+    if (jsonText) {
+      try {
+        arr = JSON.parse(jsonText);
+      } catch (e1) {
+        try {
+          arr = JSON.parse(repairJsonText(jsonText));
+        } catch (e2) {
+          arr = objectsFromLooseText(jsonText);
+        }
       }
     }
 
-    var arr = null;
-    try { arr = JSON.parse(jsonText); } catch (e) {
-      return { courses: [], error: 'AI 返回的不是合法 JSON（可以让它重拍/重试）' };
+    if (!arr || (Array.isArray(arr) && !arr.length)) {
+      var loose = parseCourseText(raw);          // 模型完全没用 JSON：按「周几 节次 课程名」逐行试试
+      if (loose.courses.length) return loose;
+      if (arr && Array.isArray(arr)) return { courses: [], error: '没识别出课程（图片可能太糊，或者课表样式太特殊）' };
+      return { courses: [], error: '没能从 AI 回复里读出课程，可以重试一次，或改用文字导入' };
     }
-    if (arr && !Array.isArray(arr)) {
+    if (!Array.isArray(arr)) {
       arr = (arr.courses && Array.isArray(arr.courses)) ? arr.courses : [arr];
     }
-    if (!Array.isArray(arr)) return { courses: [], error: 'AI 返回格式不对' };
 
     var WD = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 };
     function wdOf(v) {

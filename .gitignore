@@ -6,6 +6,7 @@ workbench-web/node_modules/
 workbench-web/.toolchain/
 workbench-web/android/
 workbench-web/dist/
+workbench-web/_tmp-ai-test/
 .gradle/
 
 # 微信开发者工具的个人配置
