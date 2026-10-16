@@ -914,6 +914,12 @@
     });
     $('checkUpdateBtn').addEventListener('click', checkApkUpdate);
     $('checkOtaBtn').addEventListener('click', checkOtaUpdate);
+    // 地址被改坏了一键回到内置源（不用手打长网址）
+    $('updateBaseReset').addEventListener('click', function () {
+      S.saveSettings({ updateBase: window.WB.DEFAULT_UPDATE_BASE });
+      $('updateBaseInput').value = window.WB.DEFAULT_UPDATE_BASE;
+      toast('已恢复内置的 ' + window.WB.update.parseBases(window.WB.DEFAULT_UPDATE_BASE).length + ' 个更新源');
+    });
 
     // 更新弹窗
     $('updInstall').addEventListener('click', runInAppUpdate);

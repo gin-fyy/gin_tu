@@ -460,6 +460,23 @@ function injectApkInstaller(w) {
     }
   });
 
+  await test('我的页：更新地址可一键恢复默认', async (w) => {
+    click(w, $(w, '.tab[data-view="mine"]'));
+    type(w, $(w, '#updateBaseInput'), 'https://whatever.example.com/x');
+    click(w, $(w, '#updateBaseSave'));
+    if (w.WB.store.getSettings().updateBase.indexOf('whatever.example.com') < 0) {
+      throw new Error('保存自定义地址失败');
+    }
+    click(w, $(w, '#updateBaseReset'));
+    const s = w.WB.store.getSettings().updateBase;
+    if (s.indexOf('cdn.jsdelivr.net') < 0 || s.indexOf('ghfast.top') < 0) {
+      throw new Error('没有恢复内置的多个源：' + s);
+    }
+    if ($(w, '#updateBaseInput').value.indexOf('ghfast.top') < 0) {
+      throw new Error('输入框没跟着刷新：' + $(w, '#updateBaseInput').value);
+    }
+  });
+
   await test('更新弹窗：App 内下载安装（含进度与忽略）', async (w) => {
     const calls = w.__calls;
     w.fetch = () => Promise.resolve({

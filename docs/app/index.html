@@ -122,10 +122,11 @@
           <span>当前版本</span>
           <span class="tip" id="versionLine">—</span>
         </div>
-        <div class="tip" style="margin-top:8px">更新地址：<b>可填多个，一行一个，App 从上往下试</b>。默认已内置 CDN 地址；也可以加上电脑上 <b>node _tools/serve.js</b> 打印的局域网地址（手机需与电脑同一 Wi-Fi）。</div>
+        <div class="tip" style="margin-top:8px">更新地址：<b>可填多个，一行一个</b>，App 会同时问所有地址、取版本最新的那个。默认已内置 5 个源（CDN + 国内镜像）；也可以加上电脑上 <b>node _tools/serve.js</b> 打印的局域网地址（手机需与电脑同一 Wi-Fi）。地址填错也不会漏更新。</div>
         <div class="row" style="margin-top:10px; align-items:flex-start">
           <textarea id="updateBaseInput" class="cat-input" rows="2" placeholder="https://cdn.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs&#10;http://192.168.1.5:5173"></textarea>
           <button class="mini-btn" id="updateBaseSave">保存</button>
+          <button class="mini-btn ghost" id="updateBaseReset">恢复默认</button>
         </div>
         <div class="row" style="margin-top:12px">
           <button class="mini-btn" id="checkUpdateBtn">检查更新</button>
