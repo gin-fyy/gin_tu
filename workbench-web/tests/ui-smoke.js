@@ -705,7 +705,7 @@ function injectApkInstaller(w) {
     const file = new w.File([new w.Uint8Array([137, 80, 78, 71])], 'tt.png', { type: 'image/png' });
     Object.defineProperty(input, 'files', { value: [file], configurable: true });
     input.dispatchEvent(new w.Event('change', { bubbles: true }));
-    await sleep(2200);   // 等图片解码兜底（1.5s）+ 解析
+    await sleep(3000);   // 等图片解码兜底（2.5s）+ 解析
 
     if (!sent) throw new Error('没有调用 AI 接口');
     if (sent.url.indexOf('bigmodel.cn') < 0) throw new Error('接口地址不对：' + sent.url);

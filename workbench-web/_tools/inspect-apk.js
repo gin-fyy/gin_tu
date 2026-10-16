@@ -196,6 +196,11 @@ if (manifestEntry) {
   } else {
     err('清单里找不到 apkinstaller 的 FileProvider');
   }
+  if (hasIn('largeHeap')) {
+    ok('清单里开了 largeHeap（大图/自定义壁纸更从容）');
+  } else {
+    err('清单里没有 largeHeap（大壁纸可能更容易卡）');
+  }
 }
 
 console.log('\n' + (fail ? '共 ' + fail + ' 个问题' : 'APK 自检通过 ✓'));

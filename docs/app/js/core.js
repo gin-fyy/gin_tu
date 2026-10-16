@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.4.0';
+  var APP_VERSION = '1.4.1';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -471,21 +471,85 @@
     if (!dataUrl) {
       wallpaperMem = '';
       return idbDel('wallpaper').catch(function () { return false; }).then(function () {
+        return idbDel('wallpaperBlob').catch(function () { return false; });
+      }).then(function () {
         storage.removeRaw(KEY_WALLPAPER);
+        revokeWallpaperUrl();
         return true;
       });
     }
     wallpaperMem = String(dataUrl);
-    return idbSet('wallpaper', wallpaperMem).then(function () {
-      storage.removeRaw(KEY_WALLPAPER);
-      return true;
-    }).catch(function () {
-      // IndexedDB 不可用就退回 localStorage，并如实回报是否写进去了
+    revokeWallpaperUrl();
+    // 优先把 Blob 也存一份：显示时用 blob: URL，比几 MB 的 base64 背景清晰也更省内存
+    var p = idbSet('wallpaper', wallpaperMem).then(function () { return true; }).catch(function () {
       try {
         storage.setRaw(KEY_WALLPAPER, wallpaperMem);
         return storage.getRaw(KEY_WALLPAPER) === wallpaperMem;
       } catch (e) { return false; }
     });
+    return p.then(function (ok) {
+      if (!ok) return false;
+      try {
+        var blob = dataUrlToBlob(wallpaperMem);
+        if (blob) return idbSet('wallpaperBlob', blob).catch(function () { return false; }).then(function () { return true; });
+      } catch (e) { /* Blob 存不了也没关系，退回 dataURL 显示 */ }
+      return true;
+    });
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    var s = String(dataUrl || '');
+    var m = s.match(/^data:([^;,]+)?(;base64)?,([\s\S]*)$/);
+    if (!m) return null;
+    var type = m[1] || 'image/jpeg';
+    var body = m[3];
+    if (typeof atob !== 'function') return null;
+    var bin = m[2] ? atob(body) : decodeURIComponent(body);
+    var len = bin.length;
+    var buf = new Uint8Array(len);
+    for (var i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+    return new Blob([buf], { type: type });
+  }
+
+  var wallpaperUrl = '';
+  function revokeWallpaperUrl() {
+    if (!wallpaperUrl) return;
+    try {
+      if (typeof URL !== 'undefined' && URL.revokeObjectURL) URL.revokeObjectURL(wallpaperUrl);
+    } catch (e) { /* ignore */ }
+    wallpaperUrl = '';
+  }
+
+  // 显示用的地址：优先 blob:（清晰、省内存），没有就先用 dataURL；准备好后回调通知
+  function getWallpaperDisplayUrl(onReady) {
+    if (wallpaperUrl) {
+      if (onReady) onReady(wallpaperUrl);
+      return wallpaperUrl;
+    }
+    if (!wallpaperMem) return '';
+    try {
+      if (typeof indexedDB !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {
+        idbGet('wallpaperBlob').then(function (blob) {
+          if (blob && typeof blob === 'object' && blob.size) {
+            try { wallpaperUrl = URL.createObjectURL(blob); } catch (e) { wallpaperUrl = ''; }
+            if (wallpaperUrl && onReady) onReady(wallpaperUrl);
+          }
+        }).catch(function () { /* ignore */ });
+      }
+    } catch (e) { /* ignore */ }
+    return wallpaperMem;
+  }
+
+  // 自定义壁纸应该压到多大：按屏幕尺寸来，长边不超过 maxEdge，别把清晰度白白丢掉
+  function wallpaperTargetSize(w, h, maxEdge) {
+    var mw = Number(w) || 0;
+    var mh = Number(h) || 0;
+    var cap = Number(maxEdge) || 2160;
+    if (mw <= 0 || mh <= 0) return { w: cap, h: cap };
+    var long = Math.max(mw, mh);
+    if (long <= cap) return { w: Math.round(mw), h: Math.round(mh) };
+    var k = cap / long;
+    return { w: Math.max(1, Math.round(mw * k)), h: Math.max(1, Math.round(mh * k)) };
   }
 
   function setWallpaperImage(dataUrl) {   // 兼容旧调用
@@ -1129,6 +1193,9 @@
     setWallpaperImage: setWallpaperImage,
     loadWallpaperImage: loadWallpaperImage,
     saveWallpaperImage: saveWallpaperImage,
+    getWallpaperDisplayUrl: getWallpaperDisplayUrl,
+    revokeWallpaperUrl: revokeWallpaperUrl,
+    wallpaperTargetSize: wallpaperTargetSize,
     getCourses: getCourses,
     saveCourses: saveCourses,
     addCourse: addCourse,
@@ -1404,6 +1471,9 @@
     DATA_VERSION: DATA_VERSION,
     WALLPAPERS: WALLPAPERS,
     wallpaperCss: wallpaperCss,
+    wallpaperTargetSize: wallpaperTargetSize,
+    getWallpaperDisplayUrl: getWallpaperDisplayUrl,
+    revokeWallpaperUrl: revokeWallpaperUrl,
     DEFAULT_WHEEL: DEFAULT_WHEEL,
     wheelPick: wheelPick,
     TREE_STAGES: TREE_STAGES,

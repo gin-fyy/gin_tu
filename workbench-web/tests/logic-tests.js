@@ -873,6 +873,28 @@ function makeCases(mode) {
     ok(WB.QUOTES.indexOf(d) >= 0, '换来的也要在库里');
   };
 
+  cases['壁纸: 按长边算压缩尺寸（不低于屏幕就是清晰）'] = (WB) => {
+    // 手机竖屏 1080×2400：上限给 2400（=屏幕长边）→ 不缩，保持原分辨率
+    var s = WB.wallpaperTargetSize(1080, 2400, 2400);
+    eq(s.w, 1080);
+    eq(s.h, 2400);
+    // 上限 2160 时按长边等比缩（2400 → 2160）
+    s = WB.wallpaperTargetSize(1080, 2400, 2160);
+    eq(s.w, 972);
+    eq(s.h, 2160);
+    // 大图按长边缩到 2160
+    s = WB.wallpaperTargetSize(4000, 3000, 2160);
+    eq(s.w, 2160);
+    eq(s.h, 1620);
+    // 方形
+    s = WB.wallpaperTargetSize(3000, 3000, 2160);
+    eq(s.w, 2160);
+    eq(s.h, 2160);
+    // 尺寸缺失时也要给出合理值
+    s = WB.wallpaperTargetSize(0, 0, 2160);
+    ok(s.w > 0 && s.h > 0, '尺寸缺失时也要给出合理值：' + JSON.stringify(s));
+  };
+
   return cases;
 }
 

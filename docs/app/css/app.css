@@ -363,7 +363,14 @@ select { width: auto; }
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
+  overflow: hidden;
+}
+.wallpaper-layer img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 .wallpaper-dim {
   position: fixed;

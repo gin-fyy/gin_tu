@@ -649,17 +649,31 @@
     var s = S.getSettings();
     var w = window.WB.wallpaperCss(s, S.getWallpaperImage());
     var layer = $('wallpaperLayer');
+    var img = $('wallpaperImg');
     var dim = $('wallpaperDim');
+
+    function place(url) {
+      if (!url || !img) return;
+      if (img.getAttribute('src') !== url) img.setAttribute('src', url);
+    }
 
     if (w.image) {
       layer.hidden = false;
-      layer.style.backgroundImage = w.image;
       dim.hidden = false;
       dim.style.background = 'rgba(12,16,24,' + (w.dim / 100) + ')';
       document.body.classList.add('wb-wallpaper');
+      if (w.kind === 'custom' && w.url) {
+        // 自己的照片：交给 <img> 贴图（先用 dataURL 顶上，blob: 准备好再换，更清晰更省内存）
+        layer.style.backgroundImage = '';
+        place(S.getWallpaperDisplayUrl(place));
+      } else {
+        if (img) img.removeAttribute('src');
+        layer.style.backgroundImage = w.image;
+      }
     } else {
       layer.hidden = true;
       layer.style.backgroundImage = '';
+      if (img) img.removeAttribute('src');
       dim.hidden = true;
       document.body.classList.remove('wb-wallpaper');
     }
@@ -737,17 +751,20 @@
     el.textContent = '浏览器通知权限：' + window.Notification.permission;
   }
 
+  // 只重绘「当前页签」+ 首页那几个小卡片：改一个任务不再把 5 个页面全部重渲染（更流畅）
   function renderAll() {
+    var v = state.view || 'home';
     renderTop();
-    renderHome();
-    renderTasks();
-    renderCourse();
-    renderStats();
-    renderMine();
+    if (v === 'home') renderHome();
+    else if (v === 'tasks') renderTasks();
+    else if (v === 'course') renderCourse();
+    else if (v === 'stats') renderStats();
+    else if (v === 'mine') renderMine();
     renderTree();
     renderQuote();
     renderPomo();
     applyAppearance();
+    applyWallpaper();     // 壁纸跟页签无关，必须每次都应用（否则切到别的页就"壁纸没了"）
   }
 
   /* ===================== 课表 ===================== */
@@ -981,10 +998,10 @@
     toast(aiKeyOf() ? 'AI 配置已保存' : '已清空 AI Key');
   }
 
-  // 压缩图片，避免上传太大、也省流量（解码不出来就直接用原图，绝不卡住）
-  function compressImage(dataUrl, maxW, quality, cb) {
+  // 压缩图片（按"长边"限制，避免竖图只按宽度算导致还是巨大），解码不出来就用原图，绝不卡住
+  function compressImage(dataUrl, maxEdge, quality, cb) {
     var done = false;
-    var timer = setTimeout(function () { finish(dataUrl); }, 1500);
+    var timer = setTimeout(function () { finish(dataUrl); }, 2500);
     function finish(out) {
       if (done) return;
       done = true;
@@ -995,9 +1012,12 @@
       var img = new Image();
       img.onload = function () {
         try {
-          var scale = Math.min(1, maxW / (img.width || maxW));
-          var w = Math.max(1, Math.round((img.width || maxW) * scale));
-          var h = Math.max(1, Math.round((img.height || maxW) * scale));
+          var iw = img.width || 0;
+          var ih = img.height || 0;
+          var long = Math.max(iw, ih);
+          var scale = (long > 0 && maxEdge > 0) ? Math.min(1, maxEdge / long) : 1;
+          var w = Math.max(1, Math.round((iw || maxEdge) * scale));
+          var h = Math.max(1, Math.round((ih || maxEdge) * scale));
           var cv = document.createElement('canvas');
           cv.width = w;
           cv.height = h;
@@ -1110,9 +1130,11 @@
         });
       }
 
-      compressImage(raw, 1400, 0.85, function (mid) {
-        // 图片太大容易被接口拒绝：超过约 1.3MB 再压一次
-        if (mid.length > 1400000) compressImage(raw, 1000, 0.7, send);
+      // 画质优先：上限取「不低于屏幕分辨率，且至少 2160」——手机 1080×2400 的原图就不缩，保住清晰度
+      var screenLong = Math.max(window.innerWidth || 0, window.innerHeight || 0);
+      var cap = Math.max(2160, screenLong);
+      compressImage(raw, cap, 0.92, function (mid) {
+        if (mid.length > 5200000) compressImage(raw, Math.round(cap * 0.8), 0.88, send);
         else send(mid);
       });
     };
@@ -1506,6 +1528,7 @@
       btn.className = 'tab' + (btn.dataset.view === name ? ' on' : '');
     });
     $('fabNew').hidden = (name === 'stats' || name === 'mine');
+    renderAll();          // 切过去时再渲染这个页面（配合上面的"只画当前页"）
     window.scrollTo(0, 0);
     try { localStorage.setItem('wb_view', name); } catch (e) { /* ignore */ }
   }
