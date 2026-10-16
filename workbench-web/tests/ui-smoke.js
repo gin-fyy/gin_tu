@@ -819,6 +819,26 @@ function injectApkInstaller(w) {
     }
     if ($(w, '#petBars').children.length !== 3) throw new Error('应该有三条状态条');
 
+    // 完成 3 个任务 = 30 经验；撤销 + 重做不该重复加经验；新完成才加
+    if (w.WB.store.getPet().xp !== 30) throw new Error('完成 3 个任务应该有 30 经验：' + w.WB.store.getPet().xp);
+    const doneId = w.WB.store.getTasks().filter((t) => t.done)[0].id;
+    w.WB.store.toggleDone(doneId);            // 撤销完成
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await sleep(40);
+    if (w.WB.store.getPet().xp !== 30) throw new Error('撤销完成不该扣经验：' + w.WB.store.getPet().xp);
+    w.WB.store.toggleDone(doneId);            // 重新勾上（不该再发一次经验）
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await sleep(40);
+    if (w.WB.store.getPet().xp !== 30) throw new Error('同一件事重复勾选不该刷经验：' + w.WB.store.getPet().xp);
+
+    addQuick(w, '再来一件');
+    const freshId = w.WB.store.getTasks().filter((t) => !t.done)[0].id;
+    w.WB.store.toggleDone(freshId);
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await sleep(40);
+    if (w.WB.store.getPet().xp !== 40) throw new Error('新完成的任务应该 +10 经验：' + w.WB.store.getPet().xp);
+    if (w.WB.store.getPet().food !== 7) throw new Error('食物也应该 +1（3 见面礼 + 4 个任务 = 7）：' + w.WB.store.getPet().food);
+
     // 喂食：把饱食压到 10，点喂食应涨回来
     const cur = w.WB.store.getPet();
     w.WB.store.savePet(Object.assign({}, cur, { fullness: 10, food: 3 }));

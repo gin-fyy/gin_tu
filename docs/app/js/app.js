@@ -1474,11 +1474,11 @@
       return;
     }
 
-    // 同步完成数（撤销完成也会同步回去）
+    // 同步完成数（用"历史最高"计数：撤销完成不会扣经验，但重复勾选同一件事也刷不到经验）
     var total = S.getCompletions().length;
-    if (Number(st.lastCount) !== total) {
-      var diff = total - (Number(st.lastCount) || 0);
-      if (diff > 0) st = window.WB.petGain(st, diff, Date.now());
+    var mark = Number(st.lastCount) || 0;
+    if (total > mark) {
+      st = window.WB.petGain(st, total - mark, Date.now());
       st.lastCount = total;
     }
     var wasAlive = st.alive;
