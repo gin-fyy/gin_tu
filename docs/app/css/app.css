@@ -541,6 +541,26 @@ input[type="range"] { padding: 0; border: none; background: transparent; }
   text-align: center;
 }
 
+/* ===== 虚拟小树 ===== */
+.tree-card { display: flex; align-items: center; gap: 14px; }
+.tree-visual { flex: 0 0 66px; height: 78px; display: flex; align-items: flex-end; justify-content: center; }
+.tree-visual svg { width: 66px; height: 78px; }
+.tree-main { flex: 1; min-width: 0; }
+.tree-stage { display: flex; align-items: baseline; gap: 8px; font-size: 17px; font-weight: 700; }
+.tree-water { font-size: 11px; font-weight: 500; color: var(--success); }
+.tree-bar { height: 8px; border-radius: 999px; background: #EEF1F6; overflow: hidden; margin: 9px 0 6px; }
+.tree-bar-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #3ED36A, #12B886); transition: width 0.3s ease; }
+
+/* ===== 每日一句 ===== */
+.quote-text { font-size: 15px; line-height: 1.7; color: #3A4150; }
+.quote-text::before { content: '「'; color: var(--muted); }
+.quote-text::after { content: '」'; color: var(--muted); }
+
+/* ===== 番茄钟 ===== */
+.pomo-time { font-size: 30px; font-weight: 700; letter-spacing: 1px; color: #2A3040; font-variant-numeric: tabular-nums; }
+.pomo-time.running { color: var(--primary); }
+.pomo-min.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+
 /* ===== 窄屏微调 ===== */
 @media (max-width: 360px) {
   .stat-item .num { font-size: 20px; }

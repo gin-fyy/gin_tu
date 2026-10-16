@@ -744,6 +744,9 @@
     renderCourse();
     renderStats();
     renderMine();
+    renderTree();
+    renderQuote();
+    renderPomo();
     applyAppearance();
   }
 
@@ -1287,6 +1290,212 @@
     toast('已恢复默认作息');
   }
 
+  /* ===================== 小树 / 每日一句 / 番茄钟 ===================== */
+  function treeSvg(stage) {
+    if (stage === 'tree') {
+      return '<svg viewBox="0 0 64 76" fill="none">' +
+        '<path d="M32 68V38" stroke="#8A6A4B" stroke-width="5" stroke-linecap="round"/>' +
+        '<path d="M32 50l-11-8M32 44l11-8" stroke="#8A6A4B" stroke-width="3.5" stroke-linecap="round"/>' +
+        '<circle cx="32" cy="24" r="18" fill="#34C759"/>' +
+        '<circle cx="17" cy="33" r="12" fill="#3ED36A"/>' +
+        '<circle cx="47" cy="33" r="12" fill="#2FB552"/>' +
+        '<path d="M18 70h28" stroke="#C9A227" stroke-width="4" stroke-linecap="round"/>' +
+        '</svg>';
+    }
+    if (stage === 'sprout') {
+      return '<svg viewBox="0 0 64 76" fill="none">' +
+        '<path d="M32 68V44" stroke="#8A6A4B" stroke-width="4" stroke-linecap="round"/>' +
+        '<path d="M32 47c-10 0-16-6-16-14 9 0 16 5 16 14z" fill="#34C759"/>' +
+        '<path d="M32 45c8 0 13-5 13-12-8 0-13 4-13 12z" fill="#3ED36A"/>' +
+        '<path d="M18 70h28" stroke="#C9A227" stroke-width="4" stroke-linecap="round"/>' +
+        '</svg>';
+    }
+    return '<svg viewBox="0 0 64 76" fill="none">' +
+      '<path d="M32 66V55" stroke="#8A6A4B" stroke-width="3" stroke-linecap="round"/>' +
+      '<ellipse cx="32" cy="62" rx="9" ry="7" fill="#B98A5E"/>' +
+      '<path d="M32 55c-3-3-3-7 0-9 3 2 3 6 0 9z" fill="#34C759"/>' +
+      '<path d="M20 70h24" stroke="#C9A227" stroke-width="4" stroke-linecap="round"/>' +
+      '</svg>';
+  }
+
+  function renderTree() {
+    var t = window.WB.treeOf(S.getCompletions(), D.todayStr());
+    $('treeVisual').innerHTML = treeSvg(t.stage);
+    $('treeStage').textContent = t.stageName;
+    $('treeWater').hidden = !t.wateredToday;
+    $('treeBar').style.width = Math.round(t.progress * 100) + '%';
+    $('treeHint').textContent = t.atMax
+      ? '已经长成一棵小树啦 —— 继续完成就一直在长大'
+      : ('再完成 ' + t.remaining + ' 个任务就长成' + t.nextName);
+    var st = window.WB.stats || {};
+    var streak = (typeof st.streakOf === 'function') ? st.streakOf(S.getCompletions(), D.todayStr()) : 0;
+    $('treeMeta').textContent = '累计完成 ' + t.total + ' 个任务' + (streak > 1 ? ' · 连续 ' + streak + ' 天' : '');
+  }
+
+  var quoteShown = '';
+  function renderQuote() {
+    if (!quoteShown) quoteShown = window.WB.quoteOfDay(D.todayStr());
+    $('quoteText').textContent = quoteShown;
+  }
+
+  function nextQuote() {
+    quoteShown = window.WB.randomQuote(null, quoteShown);
+    $('quoteText').textContent = quoteShown;
+  }
+
+  /* ---------- 番茄钟 ---------- */
+  var pomo = null;
+  var pomoTimer = null;
+
+  function savePomoState() { S.savePomo(pomo); }
+
+  function loadPomo() {
+    var today = D.todayStr();
+    var p = S.getPomo() || {};
+    var minutes = Number(p.minutes) || 25;
+    var st = {
+      date: p.date || today,
+      count: Number(p.count) || 0,
+      minutes: minutes,
+      running: !!p.running,
+      paused: !!p.paused,
+      endAt: Number(p.endAt) || 0,
+      remainSec: (p.remainSec === undefined || p.remainSec === null) ? minutes * 60 : Number(p.remainSec)
+    };
+    if (st.date !== today) {
+      st.date = today;
+      st.count = 0;
+      st.running = false;
+      st.paused = false;
+      st.endAt = 0;
+      st.remainSec = st.minutes * 60;
+    }
+    pomo = st;
+    savePomoState();
+    if (pomo.running && pomo.endAt && pomo.endAt <= Date.now()) finishPomo(false, true);
+    return pomo;
+  }
+
+  function pomoRemainSec() {
+    if (!pomo) loadPomo();
+    if (pomo.running) return Math.max(0, Math.round((pomo.endAt - Date.now()) / 1000));
+    return Math.max(0, Number(pomo.remainSec) || pomo.minutes * 60);
+  }
+
+  function fmtMS(sec) {
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function renderPomo() {
+    if (!pomo) loadPomo();
+    var remain = pomoRemainSec();
+    $('pomoTime').textContent = fmtMS(remain);
+    $('pomoTime').className = 'pomo-time' + (pomo.running ? ' running' : '');
+    $('pomoState').textContent = pomo.running
+      ? ('专注中 · 还有 ' + Math.ceil(remain / 60) + ' 分钟')
+      : ('还没开始 · ' + pomo.minutes + ' 分钟一段');
+    $('pomoStart').textContent = pomo.running ? '暂停' : (pomo.paused ? '继续' : '开始专注');
+    $('pomoToday').textContent = '今天已完成 ' + pomo.count + ' 个番茄';
+    Array.prototype.forEach.call(document.querySelectorAll('.pomo-min'), function (b) {
+      b.className = 'mini-btn ghost pomo-min' + (Number(b.dataset.pomo) === pomo.minutes ? ' on' : '');
+    });
+  }
+
+  function startPomo() {
+    if (!pomo) loadPomo();
+    if (pomo.running) {
+      pomo.remainSec = pomoRemainSec();
+      pomo.running = false;
+      pomo.paused = true;
+      pomo.endAt = 0;
+      savePomoState();
+      cancelPomoNotify();
+      renderPomo();
+      toast('已暂停');
+      return;
+    }
+    if (pomoRemainSec() <= 0) pomo.remainSec = pomo.minutes * 60;
+    pomo.endAt = Date.now() + Math.max(1, pomoRemainSec()) * 1000;
+    pomo.running = true;
+    pomo.paused = false;
+    savePomoState();
+    schedulePomoNotify();
+    renderPomo();
+    ensurePomoTick();
+    toast('开始专注 ' + Math.ceil(pomoRemainSec() / 60) + ' 分钟');
+  }
+
+  function resetPomo() {
+    if (!pomo) loadPomo();
+    pomo.running = false;
+    pomo.paused = false;
+    pomo.endAt = 0;
+    pomo.remainSec = pomo.minutes * 60;
+    savePomoState();
+    cancelPomoNotify();
+    renderPomo();
+  }
+
+  // silent=true 表示"App 重开时发现已经到点了"，不弹提示（通知已经响过了）
+  function finishPomo(silent, fromLoad) {
+    if (!pomo) loadPomo();
+    pomo.running = false;
+    pomo.paused = false;
+    pomo.endAt = 0;
+    pomo.remainSec = pomo.minutes * 60;
+    pomo.count = (Number(pomo.count) || 0) + 1;
+    savePomoState();
+    if (!silent && !fromLoad) {
+      toast('🍅 一个番茄完成！起来活动一下');
+      cancelPomoNotify();
+    }
+    if (fromLoad) return pomo;
+    renderPomo();
+    return pomo;
+  }
+
+  function pomoTick() {
+    if (!pomo || !pomo.running) {
+      if (pomoTimer) { clearInterval(pomoTimer); pomoTimer = null; }
+      return;
+    }
+    var remain = pomoRemainSec();
+    if (remain <= 0) {
+      if (pomoTimer) { clearInterval(pomoTimer); pomoTimer = null; }
+      finishPomo(false);
+      return;
+    }
+    $('pomoTime').textContent = fmtMS(remain);
+    $('pomoState').textContent = '专注中 · 还有 ' + Math.ceil(remain / 60) + ' 分钟';
+  }
+
+  function ensurePomoTick() {
+    if (pomoTimer) return;
+    pomoTimer = setInterval(pomoTick, 1000);
+  }
+
+  function schedulePomoNotify() {
+    if (!Native || !Native.schedule) return;
+    try {
+      Native.schedule({
+        notifications: [{
+          id: 9001,
+          title: '🍅 专注结束',
+          body: pomo.minutes + ' 分钟到了，起来活动一下，或者再来一段',
+          schedule: { at: new Date(pomo.endAt) },
+          sound: null
+        }]
+      }).catch(function () { /* 没权限就算了，App 内还有提示 */ });
+    } catch (e) { /* ignore */ }
+  }
+
+  function cancelPomoNotify() {
+    if (!Native || !Native.cancel) return;
+    try { Native.cancel({ notifications: [{ id: 9001 }] }).catch(function () {}); } catch (e) { /* ignore */ }
+  }
+
   /* ===================== 视图切换 ===================== */
   function showView(name) {
     state.view = name;
@@ -1721,6 +1930,21 @@
       toast('已恢复默认选项');
     });
 
+    // 小树 / 每日一句 / 番茄钟
+    $('quoteNext').addEventListener('click', nextQuote);
+    $('pomoStart').addEventListener('click', startPomo);
+    $('pomoReset').addEventListener('click', resetPomo);
+    Array.prototype.forEach.call(document.querySelectorAll('.pomo-min'), function (b) {
+      b.addEventListener('click', function () {
+        if (!pomo) loadPomo();
+        if (pomo.running) { toast('专注中，先暂停再改时长'); return; }
+        pomo.minutes = Number(b.dataset.pomo) || 25;
+        pomo.remainSec = pomo.minutes * 60;
+        savePomoState();
+        renderPomo();
+      });
+    });
+
     $('checkUpdateBtn').addEventListener('click', checkApkUpdate);
     $('checkOtaBtn').addEventListener('click', checkOtaUpdate);
     // 地址被改坏了一键回到内置源（不用手打长网址）
@@ -1839,6 +2063,13 @@
       renderWallpaperGrid();
       applyWallpaper();
     });
+
+    // 番茄钟：如果上次开着且还没到点，继续走；通知是系统级的，会自己响
+    loadPomo();
+    if (pomo && pomo.running) {
+      schedulePomoNotify();
+      ensurePomoTick();
+    }
 
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) { checkReminders(); renderAll(); checkUpdateAuto(); }

@@ -794,6 +794,51 @@ function injectApkInstaller(w) {
     }
   });
 
+  await test('小树 / 每日一句 / 番茄钟', async (w) => {
+    // 小树：初始是种子
+    if ($(w, '#treeStage').textContent !== '种子') throw new Error('初始应是种子：' + $(w, '#treeStage').textContent);
+
+    // 完成一个任务（走真实 UI：点勾）
+    addQuick(w, '种一棵树');
+    click(w, $$(w, '#homeGroups .tcard .check')[0]);
+    await sleep(30);
+    if ($(w, '#treeMeta').textContent.indexOf('累计完成 1 个任务') < 0) {
+      throw new Error('完成一个任务后小树应长一点：' + $(w, '#treeMeta').textContent);
+    }
+    if ($(w, '#treeWater').hidden) throw new Error('今天完成过就应该显示「今日已浇水」');
+
+    // 再凑到 3 个 → 幼苗
+    const ids = w.WB.store.getTasks().map((t) => t.id);
+    for (let i = 0; i < 2; i++) w.WB.store.addTask({ title: '凑数 ' + i });
+    w.WB.store.getTasks().filter((t) => ids.indexOf(t.id) < 0).forEach((t) => w.WB.store.toggleDone(t.id));
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await sleep(40);
+    if ($(w, '#treeStage').textContent !== '幼苗') {
+      throw new Error('完成 3 个应该长成幼苗：' + $(w, '#treeStage').textContent);
+    }
+
+    // 每日一句
+    const q1 = $(w, '#quoteText').textContent;
+    if (!q1 || q1 === '—') throw new Error('每日一句没渲染');
+    click(w, $(w, '#quoteNext'));
+    const q2 = $(w, '#quoteText').textContent;
+    if (!q2 || q2 === q1) throw new Error('「换一句」没换：' + q2);
+
+    // 番茄钟
+    if ($(w, '#pomoTime').textContent !== '25:00') throw new Error('默认应是 25:00：' + $(w, '#pomoTime').textContent);
+    click(w, $(w, '.pomo-min[data-pomo="45"]'));
+    if ($(w, '#pomoTime').textContent !== '45:00') throw new Error('选 45 分后应显示 45:00：' + $(w, '#pomoTime').textContent);
+    click(w, $(w, '#pomoStart'));
+    if ($(w, '#pomoStart').textContent !== '暂停') throw new Error('开始后按钮应变成暂停');
+    if ($(w, '#pomoState').textContent.indexOf('专注中') < 0) throw new Error('状态应显示专注中：' + $(w, '#pomoState').textContent);
+    if (w.WB.store.getPomo().running !== true) throw new Error('番茄钟状态没存下来');
+    click(w, $(w, '#pomoStart'));   // 暂停
+    if ($(w, '#pomoStart').textContent !== '继续') throw new Error('暂停后按钮应变成继续');
+    click(w, $(w, '#pomoReset'));
+    if ($(w, '#pomoTime').textContent !== '45:00') throw new Error('重置后应回到所选时长：' + $(w, '#pomoTime').textContent);
+    if ($(w, '#pomoToday').textContent.indexOf('0 个番茄') < 0) throw new Error('今天番茄数应为 0：' + $(w, '#pomoToday').textContent);
+  });
+
   console.log('\n通过 ' + pass + ' 项，失败 ' + failures.length + ' 项');
   if (failures.length) {
     failures.forEach((f) => console.log('  ✗ ' + f));

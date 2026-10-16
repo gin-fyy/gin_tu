@@ -38,9 +38,49 @@
         </div>
       </div>
 
+      <div class="card tree-card">
+        <div class="tree-visual" id="treeVisual"></div>
+        <div class="tree-main">
+          <div class="tree-stage">
+            <span id="treeStage">种子</span>
+            <span class="tree-water" id="treeWater" hidden>今日已浇水 ✓</span>
+          </div>
+          <div class="tree-bar"><div class="tree-bar-fill" id="treeBar"></div></div>
+          <div class="tip" id="treeHint"></div>
+          <div class="tip" id="treeMeta"></div>
+        </div>
+      </div>
+
       <div class="quick card">
         <input id="quickInput" class="qa-input" placeholder="快速记一件事，默认加到今天" />
         <button id="quickAdd" class="qa-btn">添加</button>
+      </div>
+
+      <div class="card quote-card">
+        <div class="quote-text" id="quoteText">—</div>
+        <div class="row" style="margin-top:8px">
+          <button class="mini-btn ghost" id="quoteNext">换一句</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between; align-items:center">
+          <div>
+            <div class="s-title">🍅 番茄钟</div>
+            <div class="tip" id="pomoState">还没开始</div>
+          </div>
+          <div class="pomo-time" id="pomoTime">25:00</div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="mini-btn ghost pomo-min" data-pomo="25">25 分</button>
+          <button class="mini-btn ghost pomo-min" data-pomo="45">45 分</button>
+          <button class="mini-btn ghost pomo-min" data-pomo="60">60 分</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="mini-btn" id="pomoStart">开始专注</button>
+          <button class="mini-btn ghost" id="pomoReset">重置</button>
+        </div>
+        <div class="tip" id="pomoToday" style="margin-top:8px"></div>
       </div>
 
       <div id="homeGroups"></div>

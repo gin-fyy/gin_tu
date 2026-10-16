@@ -817,6 +817,62 @@ function makeCases(mode) {
     ok(WB.course.periodsToText(p).indexOf('1 08:00-08:45') === 0, '导出文本：' + WB.course.periodsToText(p));
   };
 
+  cases['小树: 只按完成记录成长（中断不长）'] = (WB) => {
+    const day = (n) => ({ taskId: 't' + n, title: 'T' + n, at: Date.now() });
+    const today = WB.datetime.todayStr();
+
+    let t = WB.treeOf([], today);
+    eq(t.stage, 'seed');
+    eq(t.stageName, '种子');
+    eq(t.total, 0);
+    eq(t.wateredToday, false);
+    eq(t.remaining, 3);
+
+    // 完成 1 个 → 还是种子，但进度往前走
+    t = WB.treeOf([day(1)], today);
+    eq(t.stage, 'seed');
+    eq(t.intoStage, 1);
+    ok(t.progress > 0 && t.progress < 1, '进度应在 0~1 之间：' + t.progress);
+    eq(t.wateredToday, true);
+
+    // 到 3 个 → 幼苗
+    t = WB.treeOf([day(1), day(2), day(3)], today);
+    eq(t.stage, 'sprout');
+    eq(t.stageName, '幼苗');
+    eq(t.remaining, 9);
+
+    // 到 12 个 → 小树（满级）
+    const many = [];
+    for (let i = 0; i < 12; i++) many.push(day(i));
+    t = WB.treeOf(many, today);
+    eq(t.stage, 'tree');
+    eq(t.atMax, true);
+    eq(t.progress, 1);
+    eq(t.remaining, 0);
+
+    // 昨天的完成记录：不计入"今日已浇水"，但依然算成长
+    const old = [{ taskId: 'x', at: Date.now() - 3 * 86400000 }];
+    t = WB.treeOf(old, today);
+    eq(t.total, 1);
+    eq(t.wateredToday, false);
+  };
+
+  cases['每日一句: 同一天固定、换一句会变'] = (WB) => {
+    const a = WB.quoteOfDay('2026-10-16');
+    const b = WB.quoteOfDay('2026-10-16');
+    const c = WB.quoteOfDay('2026-10-17');
+    eq(a, b);
+    ok(a.length > 4, '语录不能是空的：' + a);
+    ok(WB.QUOTES.indexOf(a) >= 0, '必须来自语录库');
+    ok(WB.QUOTES.length >= 10, '语录至少要 10 条：' + WB.QUOTES.length);
+    // 不同日期大概率不同（允许极端巧合相同，这里只要求能取到库里的内容）
+    ok(WB.QUOTES.indexOf(c) >= 0, '换一天也要取到库里的内容');
+    // 换一句：不会和当前重复
+    const d = WB.randomQuote(null, a);
+    ok(d !== a, '换一句应该换掉：' + d);
+    ok(WB.QUOTES.indexOf(d) >= 0, '换来的也要在库里');
+  };
+
   return cases;
 }
 

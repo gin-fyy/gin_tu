@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.3.6';
+  var APP_VERSION = '1.4.0';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -518,6 +518,105 @@
       id: preset.id,
       url: preset.gradient ? '' : preset.image
     };
+  }
+
+  /* ===================== 虚拟小树（完成即成长） ===================== */
+  var KEY_POMO = 'wb_pomo';
+
+  // 三个阶段，够了：种子 → 幼苗 → 小树
+  var TREE_STAGES = [
+    { id: 'seed', name: '种子', min: 0, next: 3, tip: '再完成 3 个任务就发芽' },
+    { id: 'sprout', name: '幼苗', min: 3, next: 12, tip: '再完成 9 个任务就长成小树' },
+    { id: 'tree', name: '小树', min: 12, next: 0, tip: '已经长成一棵小树啦' }
+  ];
+
+  /**
+   * 小树状态：完全由「完成记录」推导 —— 任务中断/放弃不会产生记录，所以小树不会虚长。
+   * 返回 { total, stage, stageName, stageIndex, nextName, progress, remaining, wateredToday, atMax }
+   */
+  function treeOf(comps, today) {
+    var list = comps || [];
+    var total = list.length;
+    var stage = TREE_STAGES[0];
+    for (var i = 0; i < TREE_STAGES.length; i++) {
+      if (total >= TREE_STAGES[i].min) stage = TREE_STAGES[i];
+    }
+    var idx = TREE_STAGES.indexOf(stage);
+    var next = TREE_STAGES[idx + 1] || null;
+    var into = total - stage.min;
+    var span = next ? (next.min - stage.min) : 0;
+    var ds = today || todayStr();
+    var wateredToday = false;
+    list.forEach(function (c) {
+      if (c && c.at && toDateStr(new Date(c.at)) === ds) wateredToday = true;
+    });
+    return {
+      total: total,
+      stage: stage.id,
+      stageName: stage.name,
+      stageIndex: idx,
+      nextName: next ? next.name : '',
+      intoStage: into,
+      stageSpan: span,
+      progress: next ? Math.max(0, Math.min(1, span ? into / span : 1)) : 1,
+      remaining: next ? Math.max(0, next.min - total) : 0,
+      wateredToday: wateredToday,
+      atMax: !next
+    };
+  }
+
+  /* ===================== 每日一句（有鼓励，也有调侃） ===================== */
+  var QUOTES = [
+    '今天不想做的事，明天还得做，而且要多带一份焦虑。',
+    '先啃最难的那件，剩下的时间都会变甜。',
+    '开始就已经赢过昨天躺平的自己了。',
+    '别等状态好了再开始，开始了状态才会好。',
+    '你不是没时间，你只是把时间都给了手机。',
+    '任务清单不是许愿池，写完还得动手。',
+    '慢慢来，比较快。',
+    '每完成一件小事，都是给未来的自己攒利息。',
+    '拖延的快乐是借来的，利息还得你自己还。',
+    '今天多学半小时，期末少哭一整天。',
+    '专注 25 分钟，比焦虑 2 小时有用。',
+    '你不需要很厉害才开始，你需要开始才会很厉害。',
+    '把「我等会儿做」改成「我先做 5 分钟」。',
+    '别高估一天的产出，也别低估一年的积累。',
+    '学不动的时候，就先去喝口水——但记得回来。',
+    '现在偷的懒，以后都要加班还。',
+    '比昨天多完成一件，就是进步。',
+    '做不完很正常，一直不做就不正常了。',
+    '计划是给行动打草稿，不是给焦虑找素材。',
+    '你不是一个人在硬撑，大家都一样，只是有人先开始了。'
+  ];
+
+  // 每天固定一句（同一天刷新页面不会变）；也可以换一句
+  function quoteOfDay(dateStr, quotes) {
+    var list = (quotes && quotes.length) ? quotes : QUOTES;
+    var s = String(dateStr || todayStr());
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 1000003;
+    return list[h % list.length];
+  }
+
+  function randomQuote(quotes, avoid) {
+    var list = (quotes && quotes.length) ? quotes : QUOTES;
+    if (list.length < 2) return list[0] || '';
+    for (var i = 0; i < 8; i++) {
+      var q = list[Math.floor(Math.random() * list.length)];
+      if (q !== avoid) return q;
+    }
+    return list[0];
+  }
+
+  /* ===================== 番茄钟状态（存本机） ===================== */
+  function getPomo() {
+    var p = read(KEY_POMO, null);
+    return (p && typeof p === 'object') ? p : null;
+  }
+
+  function savePomo(state) {
+    write(KEY_POMO, state || {});
+    return state;
   }
 
   /* ===================== 课表 ===================== */
@@ -1037,6 +1136,8 @@
     deleteCourse: deleteCourse,
     getWheelOptions: getWheelOptions,
     setWheelOptions: setWheelOptions,
+    getPomo: getPomo,
+    savePomo: savePomo,
     getNotifiedKeys: getNotifiedKeys,
     saveNotifiedKeys: saveNotifiedKeys,
     exportData: exportData,
@@ -1305,6 +1406,11 @@
     wallpaperCss: wallpaperCss,
     DEFAULT_WHEEL: DEFAULT_WHEEL,
     wheelPick: wheelPick,
+    TREE_STAGES: TREE_STAGES,
+    treeOf: treeOf,
+    QUOTES: QUOTES,
+    quoteOfDay: quoteOfDay,
+    randomQuote: randomQuote,
     AI_DEFAULT_ENDPOINT: AI_DEFAULT_ENDPOINT,
     AI_DEFAULT_MODEL: AI_DEFAULT_MODEL,
     AI_PROMPT: AI_PROMPT,
