@@ -313,8 +313,12 @@
     });
 
     var i = 0;
+    var reasons = [];
     function tryNext() {
-      if (i >= urls.length) return Promise.reject(new Error('所有下载源都没成功，稍后重试'));
+      if (i >= urls.length) {
+        var why = reasons.slice(0, 3).join('；');
+        return Promise.reject(new Error('所有下载源都没成功' + (why ? '（' + why + '）' : '')));
+      }
       var url = urls[i++];
       setUpdHint('正在下载安装包（第 ' + i + '/' + urls.length + ' 个源，支持断点续传）…');
       setProgress(0);
@@ -324,6 +328,8 @@
         sha256: info.sha256 || ''
       }), 240000, '这个源 4 分钟没下完').catch(function (e) {
         var msg = (e && e.message) ? e.message : String(e);
+        var host = url.replace(/^https?:\/\//, '').split('/')[0];
+        reasons.push(host + '→' + String(msg).slice(0, 60));
         setUpdHint('这个源没成功（' + msg + '），换下一个…');
         return tryNext();
       });

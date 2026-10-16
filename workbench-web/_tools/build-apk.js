@@ -252,13 +252,17 @@ function writeLocalVersion(version, versionCode) {
   }
   run('gradlew.bat', gradleArgs, { cwd: ANDROID, env: env, shell: true });
 
-  /* 7. 收集产物 */
+  /* 7. 收集产物
+        安装包用「带版本号的文件名」：CDN/镜像按 URL 缓存，
+        如果一直用固定的 workbench-debug.apk，它们会把旧包当新包发给你
+        （App 下载后 sha256 校验对不上 → 报「所有下载源都没成功」）。 */
   log('7/8 收集 APK');
   const apk = path.join(ANDROID, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
   if (!fs.existsSync(apk)) die('构建结束但没找到 APK：' + apk);
   fs.mkdirSync(DIST, { recursive: true });
-  const out = path.join(DIST, 'workbench-debug.apk');
+  const out = path.join(DIST, 'workbench-' + ver.versionName + '.apk');
   fs.copyFileSync(apk, out);
+  fs.copyFileSync(apk, path.join(DIST, 'workbench-debug.apk'));   // 兼容旧链接（人手动下载用）
   const size = (fs.statSync(out).size / 1024 / 1024).toFixed(1);
 
   /* 8. 生成 dist/version.json（App 内「检查更新」和 /update/ 下载页都读它）

@@ -78,13 +78,28 @@ copyDir(WWW, path.join(DOCS, 'app'));
 /* 更新信息 + APK */
 let meta = null;
 let apkName = 'workbench-debug.apk';
+const updateDir = path.join(DOCS, 'update');
 if (fs.existsSync(path.join(DIST, 'version.json'))) {
   meta = JSON.parse(fs.readFileSync(path.join(DIST, 'version.json'), 'utf8'));
   apkName = meta.apk || apkName;
-  copyFile(path.join(DIST, 'version.json'), path.join(DOCS, 'update', 'version.json'));
+  copyFile(path.join(DIST, 'version.json'), path.join(updateDir, 'version.json'));
   const apk = path.join(DIST, apkName);
-  if (fs.existsSync(apk)) copyFile(apk, path.join(DOCS, 'update', apkName));
+  if (fs.existsSync(apk)) copyFile(apk, path.join(updateDir, apkName));
   else console.log('! 还没打 APK（npm.cmd run apk），docs/update 里暂时没有安装包');
+  // 兼容旧链接：也放一份固定名（人手动下载用；App 只用带版本号的那个）
+  const legacy = path.join(DIST, 'workbench-debug.apk');
+  if (fs.existsSync(legacy)) copyFile(legacy, path.join(updateDir, 'workbench-debug.apk'));
+
+  // 清理旧版本安装包：只留最近 3 个（每个 5~6MB，别让仓库无限变大）
+  try {
+    const keep = [apkName, 'workbench-debug.apk'];
+    const olds = fs.readdirSync(updateDir)
+      .filter((f) => /^workbench-\d/.test(f) && f.endsWith('.apk') && keep.indexOf(f) < 0)
+      .map((f) => ({ f: f, t: fs.statSync(path.join(updateDir, f)).mtimeMs }))
+      .sort((a, b) => b.t - a.t)
+      .slice(2);
+    olds.forEach((o) => { try { fs.rmSync(path.join(updateDir, o.f), { force: true }); console.log('  清理旧安装包：' + o.f); } catch (e) { /* ignore */ } });
+  } catch (e) { /* ignore */ }
 } else {
   console.log('! 找不到 dist/version.json，先跑 npm.cmd run apk');
 }

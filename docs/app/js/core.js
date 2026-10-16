@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.3.4';
+  var APP_VERSION = '1.3.6';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -382,18 +382,114 @@
     write(KEY_SETTINGS, Object.assign({}, getSettings(), patch));
   }
 
-  /* ---------- 自定义壁纸图片（单独 key 存，避免每次改设置都重写一大串） ---------- */
-  function getWallpaperImage() {
-    var v = storage.getRaw(KEY_WALLPAPER);
-    return v ? String(v) : '';
+  /* ---------- 自定义壁纸 ----------
+     原来存在 localStorage（只有 5MB，还要跟任务共用），图一大就悄悄存不住 → 重启后壁纸丢失。
+     现在优先存 IndexedDB（几百 MB），老数据会自动搬过去；存不住会如实返回 false。 */
+  var wallpaperMem = '';          // 内存缓存，渲染时同步取用
+
+  var idbPromise = null;
+  function idbOpen() {
+    if (idbPromise) return idbPromise;
+    idbPromise = new Promise(function (resolve, reject) {
+      try {
+        if (typeof indexedDB === 'undefined' || !indexedDB) return reject(new Error('no-idb'));
+        var req = indexedDB.open('workbench', 1);
+        req.onupgradeneeded = function () {
+          var db = req.result;
+          if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error || new Error('idb-open-failed')); };
+      } catch (e) { reject(e); }
+    });
+    return idbPromise;
   }
 
-  function setWallpaperImage(dataUrl) {
+  function idbSet(key, value) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put(value, key);
+        tx.oncomplete = function () { res(true); };
+        tx.onerror = function () { rej(tx.error || new Error('idb-put-failed')); };
+        tx.onabort = function () { rej(tx.error || new Error('idb-put-aborted')); };
+      });
+    });
+  }
+
+  function idbGet(key) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction('kv', 'readonly');
+        var g = tx.objectStore('kv').get(key);
+        g.onsuccess = function () { res(g.result === undefined ? null : g.result); };
+        g.onerror = function () { rej(g.error || new Error('idb-get-failed')); };
+      });
+    });
+  }
+
+  function idbDel(key) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (res) {
+        var tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').delete(key);
+        tx.oncomplete = function () { res(true); };
+        tx.onerror = function () { res(false); };
+      });
+    });
+  }
+
+  // 当前自定义壁纸（同步取内存缓存，渲染用）
+  function getWallpaperImage() {
+    if (wallpaperMem) return wallpaperMem;
+    var legacy = storage.getRaw(KEY_WALLPAPER);
+    return legacy ? String(legacy) : '';
+  }
+
+  // 启动时加载（并把老版本存在 localStorage 的图搬到 IndexedDB）
+  function loadWallpaperImage() {
+    return idbGet('wallpaper').then(function (v) {
+      if (v) { wallpaperMem = String(v); return wallpaperMem; }
+      var legacy = storage.getRaw(KEY_WALLPAPER);
+      if (legacy) {
+        wallpaperMem = String(legacy);
+        return idbSet('wallpaper', wallpaperMem).then(function () {
+          storage.removeRaw(KEY_WALLPAPER);   // 搬完就清掉，给 localStorage 腾地方
+          return wallpaperMem;
+        }).catch(function () { return wallpaperMem; });
+      }
+      return '';
+    }).catch(function () {
+      var legacy = storage.getRaw(KEY_WALLPAPER);
+      wallpaperMem = legacy ? String(legacy) : '';
+      return wallpaperMem;
+    });
+  }
+
+  // 保存自定义壁纸；返回是否真的存住了（存不住就别骗用户）
+  function saveWallpaperImage(dataUrl) {
     if (!dataUrl) {
-      storage.removeRaw(KEY_WALLPAPER);
-      return;
+      wallpaperMem = '';
+      return idbDel('wallpaper').catch(function () { return false; }).then(function () {
+        storage.removeRaw(KEY_WALLPAPER);
+        return true;
+      });
     }
-    storage.setRaw(KEY_WALLPAPER, String(dataUrl));
+    wallpaperMem = String(dataUrl);
+    return idbSet('wallpaper', wallpaperMem).then(function () {
+      storage.removeRaw(KEY_WALLPAPER);
+      return true;
+    }).catch(function () {
+      // IndexedDB 不可用就退回 localStorage，并如实回报是否写进去了
+      try {
+        storage.setRaw(KEY_WALLPAPER, wallpaperMem);
+        return storage.getRaw(KEY_WALLPAPER) === wallpaperMem;
+      } catch (e) { return false; }
+    });
+  }
+
+  function setWallpaperImage(dataUrl) {   // 兼容旧调用
+    return saveWallpaperImage(dataUrl);
   }
 
   // 算出当前生效的壁纸：{ image, dim, kind }（image 为空 = 用默认背景）
@@ -932,6 +1028,8 @@
     saveSettings: saveSettings,
     getWallpaperImage: getWallpaperImage,
     setWallpaperImage: setWallpaperImage,
+    loadWallpaperImage: loadWallpaperImage,
+    saveWallpaperImage: saveWallpaperImage,
     getCourses: getCourses,
     saveCourses: saveCourses,
     addCourse: addCourse,
