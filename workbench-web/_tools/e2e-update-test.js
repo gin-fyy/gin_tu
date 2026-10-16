@@ -98,7 +98,17 @@ async function main() {
         download: async (o) => {
           dl.attempts++;
           const t0 = Date.now();
-          const r = await fetch(o.url, { headers: { 'accept-encoding': 'identity' } });
+          // 模拟原生端的读超时：90 秒还没拿到就判这个源失败（真机上由 Java 端负责）
+          const ac = new AbortController();
+          const timer = setTimeout(() => ac.abort(), 90000);
+          let r;
+          try {
+            r = await fetch(o.url, { headers: { 'accept-encoding': 'identity' }, signal: ac.signal });
+          } catch (e) {
+            throw new Error(e.name === 'AbortError' ? '这个源超时（90s）' : (e.message || String(e)));
+          } finally {
+            clearTimeout(timer);
+          }
           if (!r.ok) throw new Error('HTTP ' + r.status);
           const buf = Buffer.from(await r.arrayBuffer());
           dl.url = o.url;

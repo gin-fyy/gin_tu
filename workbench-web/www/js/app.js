@@ -258,6 +258,29 @@
     $('updProgressText').textContent = '已下载 ' + Math.round(pct) + '%';
   }
 
+  // 给 Promise 加总超时：某个源卡死也能自动换下一个（原生端仍会把已下载部分留着续传）
+  function withTimeout(promise, ms, msg) {
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        reject(new Error(msg));
+      }, ms);
+      Promise.resolve(promise).then(function (v) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(v);
+      }, function (e) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        reject(e);
+      });
+    });
+  }
+
   function showUpdateModal(info) {
     pendingUpdate = info;
     $('updVersion').textContent = 'v' + info.latestVersion + (info.latestCode ? ' (' + info.latestCode + ')' : '');
@@ -295,11 +318,11 @@
       var url = urls[i++];
       setUpdHint('正在下载安装包（第 ' + i + '/' + urls.length + ' 个源，支持断点续传）…');
       setProgress(0);
-      return ApkInstaller.download({
+      return withTimeout(ApkInstaller.download({
         url: url,
         fileName: fileName,
         sha256: info.sha256 || ''
-      }).catch(function (e) {
+      }), 240000, '这个源 4 分钟没下完').catch(function (e) {
         var msg = (e && e.message) ? e.message : String(e);
         setUpdHint('这个源没成功（' + msg + '），换下一个…');
         return tryNext();

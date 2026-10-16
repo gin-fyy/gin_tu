@@ -557,7 +557,7 @@ function makeCases(mode) {
     const list = WB.update.parseBases(d);
     ok(list.length >= 1, '默认更新地址至少要有 1 个，实际：' + JSON.stringify(list));
     list.forEach((u) => ok(/^https?:\/\//.test(u), '默认地址应是 http(s)：' + u));
-    ok(list[0].indexOf('cdn.jsdelivr.net') >= 0, '第一行应是最快的 CDN 源：' + list[0]);
+    ok(list[0].indexOf('gh-proxy.com') >= 0, '第一行应是实测最快的镜像（下载优先用它）：' + list[0]);
     eq(WB.DEFAULT_UPDATE_BASE, d);
   };
 

@@ -17,16 +17,18 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.2.0';
+  var APP_VERSION = '1.2.1';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
   // 后三个是国内可达的 GitHub 加速镜像（实测 3 秒内返回正确版本）。
+  // 顺序有讲究：排在前面的会优先用于下载（版本并列时取第一个），所以把快的放前面。
+  // jsDelivr 放后面：它对本仓库的 @main 缓存经常是旧的，而且实测下载会卡死（0 KB/s）。
   var DEFAULT_UPDATE_BASE = [
-    'https://cdn.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs',
+    'https://gh-proxy.com/https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs',
     'https://ghfast.top/https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs',
     'https://ghproxy.net/https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs',
-    'https://gh-proxy.com/https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs',
+    'https://cdn.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs',
     'https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs'
   ].join('\n');
 
