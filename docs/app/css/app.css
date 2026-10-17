@@ -375,6 +375,11 @@ select { width: auto; }
   will-change: transform;
   backface-visibility: hidden;
 }
+/* 开机时先顶上的缩略图：糊一点，等高清 blob 到了再无缝替换 */
+.wallpaper-layer img.is-thumb {
+  filter: blur(9px) saturate(108%);
+  transform: scale(1.05) translateZ(0);
+}
 .wallpaper-dim {
   position: fixed;
   inset: 0;
@@ -594,6 +599,17 @@ input[type="range"] { padding: 0; border: none; background: transparent; }
 .pet-card { display: flex; align-items: flex-start; gap: 14px; }
 .pet-visual { flex: 0 0 84px; height: 92px; display: flex; align-items: center; justify-content: center; }
 .pet-visual svg { width: 84px; height: 92px; }
+/* 渊渊的立绘（透明背景） */
+.pet-visual img.pet-img { width: auto; height: 92px; object-fit: contain; }
+.focus-pet img.pet-img { height: 150px; width: auto; }
+img.pet-img.stage-baby { height: 64px; }
+img.pet-img.stage-young { height: 78px; }
+img.pet-img.stage-adult { height: 92px; }
+img.pet-img.stage-elder { height: 92px; filter: saturate(0.7) brightness(1.06); }
+img.pet-img.stage-elder.sick { filter: saturate(0.45) brightness(1.06); }
+img.pet-img.sick { filter: saturate(0.5) hue-rotate(-6deg); }
+img.pet-img.sad { filter: saturate(0.72) brightness(0.97); }
+img.pet-img.stage-elder.sad { filter: saturate(0.55) brightness(1.02); }
 .pet-main { flex: 1; min-width: 0; }
 .pet-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; flex-wrap: wrap; }
 .pet-badge { font-size: 11px; font-weight: 500; color: var(--primary); background: var(--primary-light); border-radius: 999px; padding: 2px 8px; }

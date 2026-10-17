@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.7.0';
+  var APP_VERSION = '1.7.1';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -38,6 +38,7 @@
   var KEY_SETTINGS = 'wb_settings';
   var KEY_NOTIFIED = 'wb_notified';
   var KEY_WALLPAPER = 'wb_wallpaper_img';   // 自定义壁纸（压缩后的 dataURL，单独存避免撑大设置对象）
+  var KEY_WP_THUMB = 'wb_wallpaper_thumb';  // 壁纸缩略图（几十 KB）：开机瞬间同步显示，避免"壁纸先没了再出现"
 
   // 内置壁纸：image 可以是图片路径，也可以是纯 CSS 渐变（gradient: true）
   var WALLPAPERS = [
@@ -480,6 +481,7 @@
         return idbDel('wallpaperBlob').catch(function () { return false; });
       }).then(function () {
         storage.removeRaw(KEY_WALLPAPER);
+        storage.removeRaw(KEY_WP_THUMB);
         revokeWallpaperUrl();
         return true;
       });
@@ -501,6 +503,21 @@
       } catch (e) { /* Blob 存不了也没关系，退回 dataURL 显示 */ }
       return true;
     });
+  }
+
+  // 壁纸缩略图：存 localStorage，开机同步就能拿到（几十 KB，不会撑爆）
+  function getWallpaperThumb() {
+    try { return String(storage.getRaw(KEY_WP_THUMB) || ''); } catch (e) { return ''; }
+  }
+
+  function setWallpaperThumb(dataUrl) {
+    try {
+      if (!dataUrl) { storage.removeRaw(KEY_WP_THUMB); return ''; }
+      var s = String(dataUrl);
+      if (s.length > 900000) return '';          // 太大就别塞 localStorage 了
+      storage.setRaw(KEY_WP_THUMB, s);
+      return storage.getRaw(KEY_WP_THUMB) ? s : '';
+    } catch (e) { return ''; }
   }
 
   function dataUrlToBlob(dataUrl) {
@@ -1517,6 +1534,8 @@
     saveWallpaperImage: saveWallpaperImage,
     getWallpaperDisplayUrl: getWallpaperDisplayUrl,
     revokeWallpaperUrl: revokeWallpaperUrl,
+    getWallpaperThumb: getWallpaperThumb,
+    setWallpaperThumb: setWallpaperThumb,
     wallpaperTargetSize: wallpaperTargetSize,
     getCourses: getCourses,
     saveCourses: saveCourses,
@@ -1801,6 +1820,8 @@
     wallpaperTargetSize: wallpaperTargetSize,
     getWallpaperDisplayUrl: getWallpaperDisplayUrl,
     revokeWallpaperUrl: revokeWallpaperUrl,
+    getWallpaperThumb: getWallpaperThumb,
+    setWallpaperThumb: setWallpaperThumb,
     DEFAULT_WHEEL: DEFAULT_WHEEL,
     wheelPick: wheelPick,
     TREE_STAGES: TREE_STAGES,

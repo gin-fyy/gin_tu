@@ -648,14 +648,21 @@
 
   function applyWallpaper() {
     var s = S.getSettings();
-    var w = window.WB.wallpaperCss(s, S.getWallpaperImage());
+    var fullImg = S.getWallpaperImage();
+    var thumb = S.getWallpaperThumb();
+    // 开机时大图还在 IndexedDB 里异步读：先用缩略图顶上，别让壁纸"消失一下"
+    var usingThumb = !fullImg && !!thumb;
+    var w = window.WB.wallpaperCss(s, fullImg || thumb);
     var layer = $('wallpaperLayer');
     var img = $('wallpaperImg');
     var dim = $('wallpaperDim');
 
-    function place(url) {
+    function place(url, isThumb) {
       if (!url || !img) return;
-      if (img.getAttribute('src') !== url) img.setAttribute('src', url);
+      if (img.getAttribute('src') !== url) {
+        img.setAttribute('src', url);
+        img.className = isThumb ? 'is-thumb' : '';
+      }
       updateWpMeta();
     }
 
@@ -686,8 +693,8 @@
       if (w.kind === 'custom' && w.url) {
         // 自己的照片：只用 <img> 贴图；blob 就绪后再放上去（不塞几 MB 的 dataURL）
         layer.style.backgroundImage = '';
-        var immediate = S.getWallpaperDisplayUrl(place);
-        if (immediate) place(immediate);
+        var immediate = S.getWallpaperDisplayUrl(function (url) { place(url, false); });
+        if (immediate) place(immediate, usingThumb);
       } else {
         if (img) img.removeAttribute('src');
         layer.style.backgroundImage = w.image;
@@ -719,12 +726,14 @@
     toast(id ? '壁纸已更换' : '已恢复默认背景');
   }
 
-  // 选照片 → 压缩后再存（localStorage 空间有限）
+  // 选照片 → 压缩后存 IndexedDB，并另存一张小缩略图（开机同步显示，避免壁纸"消失一下"）
   function onWallpaperFile(file) {
     if (!file) return;
     if (!/^image\//.test(file.type || '')) { toast('请选择图片文件'); return; }
     var reader = new FileReader();
     reader.onload = function () {
+      var raw = String(reader.result || '');
+
       function save(data, note) {
         S.saveWallpaperImage(data).then(function (savedOk) {
           if (!savedOk) {
@@ -737,31 +746,27 @@
           toast('壁纸已保存' + (note ? '（' + note + '）' : ''));
         });
       }
-      var img = new Image();
-      img.onload = function () {
-        try {
-          var maxW = 1080;
-          var scale = Math.min(1, maxW / (img.width || maxW));
-          var cw = Math.max(1, Math.round((img.width || maxW) * scale));
-          var ch = Math.max(1, Math.round((img.height || maxW) * scale));
-          var cv = document.createElement('canvas');
-          cv.width = cw;
-          cv.height = ch;
-          var ctx = cv.getContext('2d');
-          if (!ctx) throw new Error('no-canvas');
-          ctx.drawImage(img, 0, 0, cw, ch);
-          var data = cv.toDataURL('image/jpeg', 0.82);
-          if (data.length > 2400000) { toast('这张图压完还是太大，换一张小点的吧'); return; }
-          save(data, Math.round(data.length / 1024) + 'KB');
-        } catch (e) {
-          // 环境不支持 canvas 时退回原图（可能较大，但能用）
-          var raw = reader.result;
-          if (raw && raw.length > 2400000) { toast('这张图太大，换一张小点的吧'); return; }
-          save(raw, '');
+
+      // 画质优先：长边不低于屏幕分辨率、至少 2160px，JPEG 92%
+      var screenLong = Math.max(window.innerWidth || 0, window.innerHeight || 0);
+      var cap = Math.max(2160, screenLong);
+      compressImage(raw, cap, 0.92, function (full) {
+        if (!full) { toast('这张图片读不了，换一张试试'); return; }
+        if (full.length > 6000000) {
+          compressImage(raw, Math.round(cap * 0.8), 0.88, function (smaller) { finish(smaller); });
+          return;
         }
-      };
-      img.onerror = function () { toast('这张图片读不了，换一张试试'); };
-      img.src = reader.result;
+        finish(full);
+
+        function finish(data) {
+          if (!data) { toast('这张图片处理失败，换一张试试'); return; }
+          // 缩略图（长边 420、质量 0.7）存 localStorage，开机瞬间就能画出来
+          compressImage(data, 420, 0.7, function (thumb) {
+            if (thumb) S.setWallpaperThumb(thumb);
+            save(data, Math.round(data.length / 1024) + 'KB');
+          });
+        }
+      });
     };
     reader.onerror = function () { toast('读取图片失败'); };
     reader.readAsDataURL(file);
@@ -1355,6 +1360,100 @@
     return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
   }
 
+  // 渊渊：蓝发鲸鱼娘（按参考图：蓝渐变长发 + 白荷叶边头饰 + 蝴蝶结 + 鲸鳍耳 + 深蓝裙白围裙 + 鲸尾）
+  function whaleGirlParts(uid, o) {
+    var hairTop = '#9BCDF7', hairMid = '#3F6FD1', hairDeep = '#223E8C';
+    var navy = '#2A4276', navyDeep = '#16233F';
+    var skin = '#FFE8DA';
+    var p = [];
+    p.push('<defs>' +
+      '<linearGradient id="hg' + uid + '" x1="0.1" y1="0" x2="0.3" y2="1">' +
+      '<stop offset="0%" stop-color="' + hairTop + '"/><stop offset="50%" stop-color="' + hairMid + '"/>' +
+      '<stop offset="100%" stop-color="' + hairDeep + '"/></linearGradient>' +
+      '<linearGradient id="bk' + uid + '" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="' + hairMid + '"/><stop offset="100%" stop-color="' + hairDeep + '"/></linearGradient>' +
+      '<linearGradient id="sk' + uid + '" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="' + navy + '"/><stop offset="100%" stop-color="' + navyDeep + '"/></linearGradient>' +
+      '<radialGradient id="ey' + uid + '" cx="42%" cy="28%" r="80%">' +
+      '<stop offset="0%" stop-color="#AFE0FF"/><stop offset="50%" stop-color="#2E6FE0"/>' +
+      '<stop offset="100%" stop-color="#14295F"/></radialGradient>' +
+      '</defs>');
+
+    p.push('<ellipse cx="50" cy="107" rx="20" ry="4.2" fill="rgba(20,24,40,0.12)"/>');
+
+    // 后发（齐肩短发，包住脸）
+    p.push('<path d="M50 15C31 15 22 29 22 45c0 12 2 21 4 29 16 7 32 7 48 0 2-8 4-17 4-29 0-16-9-30-28-30z" fill="url(#bk' + uid + ')"/>');
+    // 两侧长发（垂到裙摆）
+    p.push('<path d="M24 48q-5 24-2 47 5 2 8-2-3-24-1-45z" fill="url(#hg' + uid + ')"/>');
+    p.push('<path d="M76 48q5 24 2 47-5 2-8-2 3-24 1-45z" fill="url(#hg' + uid + ')"/>');
+    // 鲸尾
+    p.push('<path d="M66 86q15 10 21 0-7-10-21 0z" fill="#3E8FE0" stroke="#2A6FB8" stroke-width="1.3" stroke-linejoin="round"/>');
+
+    // 脚
+    p.push('<ellipse cx="43" cy="101" rx="4.2" ry="2.6" fill="#FFFFFF"/>');
+    p.push('<ellipse cx="57" cy="101" rx="4.2" ry="2.6" fill="#FFFFFF"/>');
+    p.push('<ellipse cx="43" cy="103.4" rx="4.6" ry="2.6" fill="#2B3350"/>');
+    p.push('<ellipse cx="57" cy="103.4" rx="4.6" ry="2.6" fill="#2B3350"/>');
+
+    // 梯形裙 + 白荷叶边
+    p.push('<path d="M31 68h38l7 27H24z" fill="url(#sk' + uid + ')" stroke="#111C33" stroke-width="1.2" stroke-linejoin="round"/>');
+    p.push('<path d="M25 93q25 7 50 0" stroke="#FFFFFF" stroke-width="3.4" fill="none" stroke-linecap="round"/>');
+    p.push('<circle cx="27" cy="95" r="1.9" fill="#FFF"/><circle cx="33" cy="97" r="1.9" fill="#FFF"/><circle cx="40" cy="98" r="1.9" fill="#FFF"/>' +
+      '<circle cx="60" cy="98" r="1.9" fill="#FFF"/><circle cx="67" cy="97" r="1.9" fill="#FFF"/><circle cx="73" cy="95" r="1.9" fill="#FFF"/>');
+
+    // 白围裙 + 上衣 + 领口
+    p.push('<path d="M40 66h20l4 22q-14 6-28 0z" fill="#FFFDF8" stroke="#E1E8F4" stroke-width="1"/>');
+    p.push('<path d="M42 60h16v8H42z" fill="url(#sk' + uid + ')" stroke="#111C33" stroke-width="1.1"/>');
+    p.push('<path d="M44 60l6 5 6-5" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round"/>');
+    p.push('<circle cx="50" cy="79" r="1.2" fill="#F2C14E"/><circle cx="44" cy="77" r="1" fill="#F2C14E"/><circle cx="56" cy="77" r="1" fill="#F2C14E"/>');
+
+    // 脸
+    p.push('<ellipse cx="50" cy="42" rx="23" ry="21" fill="' + skin + '" stroke="#E9C6B0" stroke-width="1.1"/>');
+    // 大眼睛
+    var eyes = [39.5, 60.5];
+    for (var i = 0; i < eyes.length; i++) {
+      var ex = eyes[i];
+      p.push('<ellipse cx="' + ex + '" cy="45.5" rx="7" ry="8.2" fill="url(#ey' + uid + ')"/>');
+      p.push('<circle cx="' + (ex - 2.4) + '" cy="42" r="2.7" fill="#FFFFFF"/>');
+      p.push('<circle cx="' + (ex + 2.6) + '" cy="48.6" r="1.3" fill="#FFFFFF" opacity="0.92"/>');
+      p.push('<path d="M' + (ex - 7.6) + ' 38.4q7.6-3.4 15.2 0" stroke="#1B2637" stroke-width="2.4" fill="none" stroke-linecap="round"/>');
+      p.push('<path d="M' + (ex - 6.4) + ' 53.6q6.4 2.4 12.8 0" stroke="#F2AFC0" stroke-width="1.2" fill="none" stroke-linecap="round"/>');
+    }
+    // 腮红 + 嘴
+    p.push('<ellipse cx="29" cy="51" rx="4.8" ry="2.7" fill="rgba(255,130,150,0.5)"/>');
+    p.push('<ellipse cx="71" cy="51" rx="4.8" ry="2.7" fill="rgba(255,130,150,0.5)"/>');
+    p.push('<path d="M47 53.5q3 4.6 6 0q-3 2.8-6 0z" fill="#EE6B7C"/>');
+
+    // 刘海（停在眼睛上方）+ 两侧碎发
+    p.push('<path d="M25 44Q23 16 50 14Q77 16 75 44Q70 28 62 30Q61 21 50 23Q39 21 38 30Q30 28 25 44z" fill="url(#hg' + uid + ')"/>');
+    p.push('<path d="M27 38q3 12 0 21-4-9-3-20z" fill="url(#hg' + uid + ')"/>');
+    p.push('<path d="M73 38q-3 12 0 21 4-9 3-20z" fill="url(#hg' + uid + ')"/>');
+
+    // 白荷叶边头饰 + 蝴蝶结
+    p.push('<path d="M29 25Q50 8 71 25" stroke="#FFFFFF" stroke-width="4.2" fill="none" stroke-linecap="round"/>');
+    p.push('<circle cx="32" cy="22" r="2.4" fill="#FFF"/><circle cx="39" cy="17" r="2.5" fill="#FFF"/>' +
+      '<circle cx="47" cy="14" r="2.5" fill="#FFF"/><circle cx="55" cy="14" r="2.5" fill="#FFF"/>' +
+      '<circle cx="63" cy="17" r="2.5" fill="#FFF"/><circle cx="69" cy="22" r="2.4" fill="#FFF"/>');
+    p.push('<path d="M70 20l-8-5v10z" fill="' + hairMid + '" stroke="#1D3672" stroke-width="1"/>');
+    p.push('<path d="M70 20l8-5v10z" fill="' + hairMid + '" stroke="#1D3672" stroke-width="1"/>');
+    p.push('<circle cx="70" cy="20" r="2.2" fill="' + hairTop + '" stroke="#1D3672" stroke-width="0.8"/>');
+
+    // 鲸鳍耳（从头发两侧伸出来）
+    p.push('<path d="M26 44q-11-7-13 3 7 5 13 1z" fill="#4D93E8" stroke="#26629F" stroke-width="1.2" stroke-linejoin="round"/>');
+    p.push('<path d="M74 44q11-7 13 3-7 5-13 1z" fill="#4D93E8" stroke="#26629F" stroke-width="1.2" stroke-linejoin="round"/>');
+
+    if (o && o.elder) {
+      p.push('<ellipse cx="50" cy="42" rx="23" ry="21" fill="rgba(255,255,255,0.22)"/>');
+      p.push('<path d="M36 31q6-2 12 0M52 31q6-2 12 0" stroke="#8A93A6" stroke-width="1.5" fill="none" stroke-linecap="round"/>');
+    }
+    if (o && o.sick) {
+      p.push('<circle cx="80" cy="26" r="8" fill="#FFF3F3" stroke="#E03131" stroke-width="1.6"/>');
+      p.push('<path d="M80 21.8v5.4M77.3 24.5h5.4" stroke="#E03131" stroke-width="1.8" stroke-linecap="round"/>');
+      p.push('<path d="M67 34q3 4 1 7" stroke="#8FB8FF" stroke-width="2" fill="none" stroke-linecap="round"/>');
+    }
+    return p.join('');
+  }
+
   // chibi 二次元宠物：大头、大眼双高光、描边、渐变；阶段只影响缩放与细节
   function petSvg(species, stage, opts) {
     var o = opts || {};
@@ -1383,6 +1482,13 @@
     }
 
     var k = stage === 'baby' ? 0.72 : (stage === 'young' ? 0.87 : 1);
+
+    // 小鲸灵「渊渊」直接用立绘资源（按参考图裁出来的透明 PNG/WebP），其他宠物仍是 SVG
+    if (species === 'whale') {
+      var cls = 'pet-img stage-' + stage + (elder ? ' elder' : '') + (o.sick ? ' sick' : '') + (moodLow ? ' sad' : '');
+      return '<img class="' + cls + '" src="img/pet-whale.webp" alt="" draggable="false" />';
+    }
+
     var parts = [];
     parts.push('<defs>' +
       '<radialGradient id="b' + uid + '" cx="34%" cy="26%" r="82%">' +
