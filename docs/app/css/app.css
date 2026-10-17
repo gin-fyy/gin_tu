@@ -676,6 +676,27 @@ img.pet-img.stage-elder.sad { filter: saturate(0.55) brightness(1.02); }
 }
 .sprite-bubble.on { opacity: 1; transform: translateY(0); pointer-events: auto; }
 
+/* 没有壁纸时玻璃没有意义：白卡铺在深色底上会变成灰的，字就看不清了 → 直接还原成实心白卡 */
+body.wb-glass:not(.wb-wallpaper) .card:not(.hero),
+body.wb-glass:not(.wb-wallpaper) .tcard,
+body.wb-glass:not(.wb-wallpaper) .stat-card,
+body.wb-glass:not(.wb-wallpaper) .seg,
+body.wb-glass:not(.wb-wallpaper) .chip,
+body.wb-glass:not(.wb-wallpaper) .search,
+body.wb-glass:not(.wb-wallpaper) .opt,
+body.wb-glass:not(.wb-wallpaper) .mini-btn {
+  background: #FFFFFF;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+body.wb-glass:not(.wb-wallpaper) .topbar { background: rgba(255, 255, 255, 0.97); backdrop-filter: none; -webkit-backdrop-filter: none; }
+body.wb-glass:not(.wb-wallpaper) .tabbar { background: rgba(255, 255, 255, 0.98); backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+/* 底部给悬浮 tabbar 留空间，否则卡片被压住看不清 */
+#view-home, #view-tasks, #view-course, #view-stats, #view-mine {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+
 /* ===== 窄屏微调 ===== */
 @media (max-width: 360px) {
   .stat-item .num { font-size: 20px; }

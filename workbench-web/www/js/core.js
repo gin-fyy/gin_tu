@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.8.1';
+  var APP_VERSION = '1.8.2';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -32,6 +32,9 @@
     'https://gcore.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs',
     'https://testingcf.jsdelivr.net/gh/gin-fyy/gin_tu@main/docs',
     'https://gin-fyy.github.io/gin_tu',
+    'https://cdn.statically.io/gh/gin-fyy/gin_tu/main/docs',
+    'https://raw.githack.com/gin-fyy/gin_tu/main/docs',
+    'https://hub.gitmirror.com/https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs',
     'https://ghproxy.net/https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs',
     'https://raw.githubusercontent.com/gin-fyy/gin_tu/main/docs'
   ].join('\n');

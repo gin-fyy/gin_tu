@@ -191,8 +191,8 @@
       setUpdateState('先填更新地址：可填多个，一行一个（例如 CDN 地址 + 电脑上 node _tools/serve.js 打印的局域网地址）。');
       return;
     }
-    setUpdateState('正在检查（' + bases.length + ' 个地址）…');
-    fetchNewest(bases, '/update/version.json')
+    setUpdateState('正在检查（' + bases.length + ' 个地址，最多 14 秒）…');
+    fetchNewest(bases, '/update/version.json', 14000)
       .then(function (hit) {
         var res = window.WB.update.evaluate(LOCAL_VERSION, hit.remote, hit.base);
         var from = hit.base.replace(/^https?:\/\//, '') + (hit.sources > 1 ? '（' + hit.sources + ' 个源中最新）' : '');
@@ -376,7 +376,7 @@
     lastAutoCheck = now;
     var bases = updateBases();
     if (!bases.length) return;
-    fetchNewest(bases, '/update/version.json', 6000).then(function (hit) {
+    fetchNewest(bases, '/update/version.json', 14000).then(function (hit) {
       var res = window.WB.update.evaluate(LOCAL_VERSION, hit.remote, hit.base);
       res.raw = hit.remote;
       if (!res.hasUpdate) return;
@@ -2563,6 +2563,11 @@
     $('updInstall').addEventListener('click', runInAppUpdate);
     $('updClose').addEventListener('click', hideUpdateModal);
     $('updLater').addEventListener('click', hideUpdateModal);
+    $('updBrowser').addEventListener('click', function () {
+      var info = pendingUpdate;
+      if (!info) return;
+      openUpdatePage(info.pageUrl || (updateBases()[0] + '/index.html'));
+    });
     $('updIgnore').addEventListener('click', function () {
       if (pendingUpdate) {
         S.saveSettings({ ignoredVersion: pendingUpdate.latestVersion });
@@ -2685,6 +2690,11 @@
 
     // 自定义壁纸存在 IndexedDB 里，异步读完再刷一次外观（否则会看不到自己的壁纸）
     S.loadWallpaperImage().then(function () {
+      // 读完了还是没有图 → 说明真的丢了（卸载/清数据/空间不足），退回内置壁纸并提示
+      if (S.getSettings().wallpaper === 'custom' && !S.getWallpaperImage()) {
+        S.saveSettings({ wallpaper: 'sakura' });
+        toast('自定义壁纸丢了（可能是清数据或卸载），已换成内置壁纸，请重新选一张');
+      }
       renderWallpaperGrid();
       applyWallpaper();
     });
