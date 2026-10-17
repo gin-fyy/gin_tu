@@ -34,7 +34,41 @@
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-  // ---------- 程序化小鲸灵：球体拼出来，带鳍、尾巴和蝴蝶结 ----------
+  // ---------- 立绘精灵：用参考图裁出的正面/侧面/背面三张，靠换图做"转身" ----------
+  function makeBillboard() {
+    var g = new THREE.Group();
+    var tex = {};
+    var loader = new THREE.TextureLoader();
+    var urls = {
+      front: 'img/pet-whale-front.webp',
+      side: 'img/pet-whale-side.webp',
+      back: 'img/pet-whale-back.webp'
+    };
+    var keys = Object.keys(urls);
+    keys.forEach(function (k) {
+      loader.load(urls[k], function (t) {
+        try { if (THREE.sRGBEncoding !== undefined) t.encoding = THREE.sRGBEncoding; } catch (e) { /* ignore */ }
+        t.minFilter = THREE.LinearFilter;
+        tex[k] = t;
+        if (k === 'front' && mat) { mat.map = t; mat.needsUpdate = true; }
+      }, undefined, function () { /* 单张失败就用兜底模型 */ });
+    });
+
+    var mat = new THREE.MeshBasicMaterial({ map: null, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    var mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.56, 2.45), mat);
+    mesh.position.y = 1.23;
+    g.add(mesh);
+    g.userData.mesh = mesh;
+    g.userData.parts = {};
+    g.userData.hasArt = function () { return !!tex.front; };
+    g.userData.setView = function (which) {
+      var t = tex[which] || tex.front;
+      if (t && mat.map !== t) { mat.map = t; mat.needsUpdate = true; }
+    };
+    return g;
+  }
+
+  // ---------- 程序化小鲸灵（立绘加载失败时兜底） ----------
   function makeProceduralPet() {
     var g = new THREE.Group();
     var blue = 0x3E8FE0, deep = 0x2A6FB8, skin = 0xBFE3FF, pink = 0xFF9FC4, white = 0xFFFFFF, ink = 0x1E2A3A;
@@ -164,9 +198,18 @@
     fill.position.set(-4, 2, -3);
     scene.add(fill);
 
-    var pet = makeProceduralPet();
+    var pet = makeBillboard();
     pet.position.y = 0;
     scene.add(pet);
+    // 立绘如果一张都没加载出来，2 秒后换成程序化模型（保证不会"什么都没有"）
+    setTimeout(function () {
+      if (rt && rt.pet === pet && pet.userData.hasArt && !pet.userData.hasArt()) {
+        rt.scene.remove(pet);
+        var fallback = makeProceduralPet();
+        rt.pet = fallback;
+        rt.scene.add(fallback);
+      }
+    }, 2200);
     var shadow = makeShadow();
     scene.add(shadow);
 
@@ -238,8 +281,25 @@
     pet.position.x = state.pos.x;
     pet.position.y = state.pos.y + bob;
     pet.position.z = 0;
-    pet.rotation.y = (state.facing > 0 ? 0.18 : -0.18) + spinY;
-    pet.rotation.z = state.mode === 'walk' ? Math.sin(now / 220) * 0.05 : Math.sin(now / 900) * 0.02;
+    pet.rotation.y = 0;
+    pet.rotation.z = state.mode === 'walk' ? Math.sin(now / 240) * 0.035 : Math.sin(now / 900) * 0.015;
+    if (state.spin > 0) pet.rotation.z += state.spin * 0.35;
+
+    // 立绘：按朝向/行走换正/侧/背面（±12° 轻微摆头，看起来有立体感）
+    if (pet.userData && pet.userData.setView) {
+      var moving = state.mode === 'walk' || state.mode === 'drag';
+      var which = 'front';
+      if (moving) {
+        which = (now % 5200) > 4400 ? 'back' : 'side';
+      } else if ((now % 9000) > 7800) {
+        which = 'back';
+      }
+      pet.userData.setView(which);
+      if (pet.userData.mesh) {
+        pet.userData.mesh.scale.x = (state.facing > 0 ? 1 : -1) * (which === 'side' ? 1 : 1);
+        pet.userData.mesh.rotation.y = Math.sin(now / 1400) * 0.12;
+      }
+    }
     if (rt.shadow) {
       rt.shadow.position.x = pet.position.x;
       var sh = 1 - Math.min(0.5, Math.abs(bob) * 0.7);
@@ -384,6 +444,7 @@
     }
     renderer.setClearColor(0x000000, 0);
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    try { if (THREE.sRGBEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding; } catch (e) { /* ignore */ }
 
     var built = buildScene();
     rt = {
