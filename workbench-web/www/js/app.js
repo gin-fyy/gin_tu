@@ -656,6 +656,26 @@
     function place(url) {
       if (!url || !img) return;
       if (img.getAttribute('src') !== url) img.setAttribute('src', url);
+      updateWpMeta();
+    }
+
+    function updateWpMeta() {
+      var meta = $('wpMeta');
+      if (!meta) return;
+      if (!(w.kind === 'custom' && w.url)) { meta.textContent = ''; return; }
+      var kb = Math.round(String(S.getWallpaperImage() || '').length * 0.75 / 1024);
+      var nw = (img && img.complete && img.naturalWidth) ? img.naturalWidth : 0;
+      var nh = (img && img.complete && img.naturalHeight) ? img.naturalHeight : 0;
+      meta.textContent = '照片：' + (nw ? (nw + '×' + nh) : '载入中…') + ' · 约 ' + kb + ' KB · 存在本机 IndexedDB';
+    }
+
+    if (img && !img.__wpBound) {
+      img.__wpBound = true;
+      img.addEventListener('load', function () { updateWpMeta(); });
+      img.addEventListener('error', function () {
+        var meta = $('wpMeta');
+        if (meta) meta.textContent = '⚠️ 壁纸图片加载失败（可能太大了）—— 建议重新选一张';
+      });
     }
 
     if (w.image) {
@@ -664,9 +684,10 @@
       dim.style.background = 'rgba(12,16,24,' + (w.dim / 100) + ')';
       document.body.classList.add('wb-wallpaper');
       if (w.kind === 'custom' && w.url) {
-        // 自己的照片：交给 <img> 贴图（先用 dataURL 顶上，blob: 准备好再换，更清晰更省内存）
+        // 自己的照片：只用 <img> 贴图；blob 就绪后再放上去（不塞几 MB 的 dataURL）
         layer.style.backgroundImage = '';
-        place(S.getWallpaperDisplayUrl(place));
+        var immediate = S.getWallpaperDisplayUrl(place);
+        if (immediate) place(immediate);
       } else {
         if (img) img.removeAttribute('src');
         layer.style.backgroundImage = w.image;
@@ -678,6 +699,7 @@
       dim.hidden = true;
       document.body.classList.remove('wb-wallpaper');
     }
+    updateWpMeta();
 
     var slider = $('wpDim');
     if (slider) slider.value = String(w.dim);
@@ -1164,6 +1186,12 @@
     var root = document.documentElement;
     root.style.setProperty('--card-alpha', (op / 100).toFixed(3));
     root.style.setProperty('--glass-blur', blur + 'px');
+    // 玻璃底色设"地板"：透明度拉低也不会低到看不见字（否则字和花色糊在一起）
+    var a = op / 100;
+    var a1 = Math.min(1, Math.max(0.76, a));
+    var a2 = Math.min(1, Math.max(0.64, a - 0.06));
+    root.style.setProperty('--glass-a1', a1.toFixed(3));
+    root.style.setProperty('--glass-a2', a2.toFixed(3));
     if (s.glass) document.body.classList.add('wb-glass');
     else document.body.classList.remove('wb-glass');
 
@@ -1314,95 +1342,129 @@
   }
 
   /* ===================== 虚拟宠物 ===================== */
-  var PET_COLORS = { dragon: '#7C5CFF', cat: '#F59F00', dog: '#C08552', whale: '#1C7ED6' };
+  var PET_COLORS = { dragon: '#8B5CF6', cat: '#F6A623', dog: '#D08B5B', whale: '#3E8FE0' };
+  var petSvgSeq = 0;
 
-  // 用简单图形拼出宠物（阶段只影响大小/细节，不做复杂动画）
+  function shadeHex(hex, amt) {
+    var h = String(hex || '#888888').replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    var r = Math.max(0, Math.min(255, ((n >> 16) & 255) + amt));
+    var g = Math.max(0, Math.min(255, ((n >> 8) & 255) + amt));
+    var b = Math.max(0, Math.min(255, (n & 255) + amt));
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  }
+
+  // chibi 二次元宠物：大头、大眼双高光、描边、渐变；阶段只影响缩放与细节
   function petSvg(species, stage, opts) {
     var o = opts || {};
     var moodLow = Number(o.mood) <= 20;
     var elder = stage === 'elder';
+    var uid = 'p' + (++petSvgSeq);
     var base = PET_COLORS[species] || PET_COLORS.whale;
+    var light = shadeHex(base, 46);
+    var dark = shadeHex(base, -44);
+    var line = shadeHex(base, -74);
+    var eyeInk = '#1E2A3A';
 
     if (stage === 'egg') {
-      return '<svg viewBox="0 0 84 92" fill="none">' +
-        '<ellipse cx="42" cy="84" rx="20" ry="5" fill="rgba(20,24,40,0.08)"/>' +
-        '<ellipse cx="42" cy="52" rx="23" ry="30" fill="#F7EAD0" stroke="#D9BE8E" stroke-width="2"/>' +
-        '<ellipse cx="34" cy="40" rx="5" ry="7" fill="#EBD7B0"/>' +
-        '<ellipse cx="50" cy="58" rx="6" ry="8" fill="#EBD7B0"/>' +
-        '<ellipse cx="38" cy="70" rx="4" ry="5" fill="#EBD7B0"/>' +
+      var cracked = (Number(o.hatch) || 0) > 0.66;
+      return '<svg viewBox="0 0 100 112" fill="none">' +
+        '<defs><radialGradient id="eg' + uid + '" cx="38%" cy="28%" r="78%">' +
+        '<stop offset="0%" stop-color="#FFFDF6"/><stop offset="100%" stop-color="#EBD8B6"/></radialGradient></defs>' +
+        '<ellipse cx="50" cy="104" rx="24" ry="5" fill="rgba(20,24,40,0.10)"/>' +
+        '<ellipse cx="50" cy="60" rx="27" ry="36" fill="url(#eg' + uid + ')" stroke="#D6BC93" stroke-width="2"/>' +
+        '<ellipse cx="36" cy="44" rx="6" ry="8" fill="#E7D3B4"/>' +
+        '<ellipse cx="58" cy="68" rx="7" ry="9" fill="#E7D3B4"/>' +
+        '<ellipse cx="44" cy="84" rx="4.5" ry="5.5" fill="#E7D3B4"/>' +
+        '<ellipse cx="38" cy="34" rx="7" ry="10" fill="rgba(255,255,255,0.6)"/>' +
+        (cracked ? '<path d="M40 28l5 9-4 6 6 6" stroke="#C2A17E" stroke-width="1.8" fill="none" stroke-linecap="round"/>' : '') +
         '</svg>';
     }
 
-    var k = stage === 'baby' ? 0.74 : (stage === 'young' ? 0.88 : 1);
-    var cx = 42;
-    var cy = 54;
-    var rx = 21 * k;
-    var ry = 19 * k;
-    var hx = 15 * k;
-    var hy = 13.5 * k;
-    var headCy = cy - ry - hy + 3;
-
+    var k = stage === 'baby' ? 0.72 : (stage === 'young' ? 0.87 : 1);
     var parts = [];
-    parts.push('<ellipse cx="' + cx + '" cy="86" rx="' + (20 * k) + '" ry="5" fill="rgba(20,24,40,0.08)"/>');
+    parts.push('<defs>' +
+      '<radialGradient id="b' + uid + '" cx="34%" cy="26%" r="82%">' +
+      '<stop offset="0%" stop-color="' + light + '"/><stop offset="100%" stop-color="' + base + '"/></radialGradient>' +
+      '<radialGradient id="h' + uid + '" cx="32%" cy="20%" r="86%">' +
+      '<stop offset="0%" stop-color="' + shadeHex(base, 62) + '"/><stop offset="100%" stop-color="' + base + '"/></radialGradient>' +
+      '<radialGradient id="e' + uid + '" cx="38%" cy="28%" r="82%">' +
+      '<stop offset="0%" stop-color="#6C8FE0"/><stop offset="100%" stop-color="#1B2540"/></radialGradient>' +
+      '</defs>');
+    parts.push('<ellipse cx="50" cy="104" rx="26" ry="5.5" fill="rgba(20,24,40,0.10)"/>');
 
-    // 物种特征（身体后面先画的部分）
+    // 背饰（画在身体后面）
     if (species === 'dragon') {
-      parts.push('<path d="M' + (cx - rx + 4) + ' ' + (cy - 4) + 'l-13 -9 5 14z" fill="#FF9FC4"/>');
-      parts.push('<path d="M' + (cx + rx - 4) + ' ' + (cy - 4) + 'l13 -9 -5 14z" fill="#FF9FC4"/>');
-      parts.push('<path d="M' + (cx + rx - 6) + ' ' + (cy + ry - 6) + 'q14 2 18 -8" stroke="' + base + '" stroke-width="4" fill="none" stroke-linecap="round"/>');
-      parts.push('<path d="M' + (cx + rx + 10) + ' ' + (cy + ry - 15) + 'l6 -5 -1 8z" fill="#FF9FC4"/>');
+      parts.push('<path d="M31 74q-19-15-23 3 10-1 19 9z" fill="' + shadeHex('#FF9FC4', -6) + '" stroke="' + shadeHex('#FF9FC4', -46) + '" stroke-width="1.5" stroke-linejoin="round"/>');
+      parts.push('<path d="M69 74q19-15 23 3-10-1-19 9z" fill="' + shadeHex('#FF9FC4', -6) + '" stroke="' + shadeHex('#FF9FC4', -46) + '" stroke-width="1.5" stroke-linejoin="round"/>');
+      parts.push('<path d="M72 88q16 9 22-1" stroke="' + base + '" stroke-width="5" fill="none" stroke-linecap="round"/>');
+      parts.push('<path d="M93 86l9-5-2 10z" fill="' + shadeHex('#FF9FC4', -6) + '" stroke="' + shadeHex('#FF9FC4', -46) + '" stroke-width="1.2" stroke-linejoin="round"/>');
     }
     if (species === 'whale') {
-      parts.push('<path d="M' + (cx + rx - 5) + ' ' + (cy + ry - 8) + 'q16 4 20 -10" stroke="' + base + '" stroke-width="5" fill="none" stroke-linecap="round"/>');
-      parts.push('<path d="M' + (cx + rx + 14) + ' ' + (cy + ry - 18) + 'q8 -6 12 2 -6 6 -12 -2z" fill="#4DABF7"/>');
+      parts.push('<path d="M50 28q1-17 10-13" stroke="#A5D8FF" stroke-width="3.6" fill="none" stroke-linecap="round"/>');
+      parts.push('<circle cx="63" cy="15" r="2.6" fill="#A5D8FF"/><circle cx="69" cy="24" r="1.9" fill="#A5D8FF"/><circle cx="57" cy="11" r="1.7" fill="#A5D8FF"/>');
+      parts.push('<path d="M24 88q-14 3-17-7 10-3 17 7z" fill="' + light + '" stroke="' + line + '" stroke-width="1.5" stroke-linejoin="round"/>');
+      parts.push('<path d="M76 90q13 9 20-1-6-9-20 1z" fill="' + light + '" stroke="' + line + '" stroke-width="1.5" stroke-linejoin="round"/>');
     }
 
-    // 身体 + 头
-    parts.push('<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '" fill="' + base + '"/>');
-    parts.push('<ellipse cx="' + cx + '" cy="' + headCy + '" rx="' + hx + '" ry="' + hy + '" fill="' + base + '"/>');
+    // 身体 + 肚皮
+    parts.push('<ellipse cx="50" cy="84" rx="19" ry="15" fill="url(#b' + uid + ')" stroke="' + line + '" stroke-width="1.6"/>');
+    parts.push('<ellipse cx="50" cy="88" rx="12" ry="10" fill="rgba(255,255,255,0.58)"/>');
 
-    // 物种特征（头上的）
+    // 头
+    parts.push('<ellipse cx="50" cy="50" rx="27" ry="24" fill="url(#h' + uid + ')" stroke="' + line + '" stroke-width="1.8"/>');
+
+    // 头饰
     if (species === 'cat') {
-      parts.push('<path d="M' + (cx - hx + 3) + ' ' + (headCy - hy + 4) + 'l-2 -12 11 6z" fill="' + base + '"/>');
-      parts.push('<path d="M' + (cx + hx - 3) + ' ' + (headCy - hy + 4) + 'l2 -12 -11 6z" fill="' + base + '"/>');
-      parts.push('<path d="M' + (cx - hx - 2) + ' ' + (headCy + 2) + 'l-8 -3M' + (cx - hx - 2) + ' ' + (headCy + 6) + 'l-8 3" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>');
-      parts.push('<path d="M' + (cx + hx + 2) + ' ' + (headCy + 2) + 'l8 -3M' + (cx + hx + 2) + ' ' + (headCy + 6) + 'l8 3" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>');
+      parts.push('<path d="M30 35l-5-17 17 9z" fill="' + base + '" stroke="' + line + '" stroke-width="1.6" stroke-linejoin="round"/>');
+      parts.push('<path d="M70 35l5-17-17 9z" fill="' + base + '" stroke="' + line + '" stroke-width="1.6" stroke-linejoin="round"/>');
+      parts.push('<path d="M31 32l-3-9 9 5z" fill="#FFB3C7"/><path d="M69 32l3-9-9 5z" fill="#FFB3C7"/>');
+      parts.push('<path d="M21 50h-9M21 57h-9M79 50h9M79 57h9" stroke="' + line + '" stroke-width="1.4" stroke-linecap="round"/>');
     }
     if (species === 'dog') {
-      parts.push('<ellipse cx="' + (cx - hx + 1) + '" cy="' + (headCy + 2) + '" rx="6" ry="10" fill="#A96B3C"/>');
-      parts.push('<ellipse cx="' + (cx + hx - 1) + '" cy="' + (headCy + 2) + '" rx="6" ry="10" fill="#A96B3C"/>');
-      parts.push('<ellipse cx="' + cx + '" cy="' + (headCy + hy - 4) + '" rx="5" ry="3.5" fill="#5B3A20"/>');
+      parts.push('<ellipse cx="25" cy="47" rx="8.5" ry="15" fill="' + dark + '" stroke="' + line + '" stroke-width="1.6"/>');
+      parts.push('<ellipse cx="75" cy="47" rx="8.5" ry="15" fill="' + dark + '" stroke="' + line + '" stroke-width="1.6"/>');
+      parts.push('<ellipse cx="50" cy="57" rx="4.8" ry="3.5" fill="#3E2A1E"/>');
+      parts.push('<path d="M50 61v4" stroke="' + line + '" stroke-width="1.5" stroke-linecap="round"/>');
     }
     if (species === 'dragon') {
-      parts.push('<path d="M' + cx + ' ' + (headCy - hy + 2) + 'l-4 -9 8 0z" fill="#FFD166"/>');
+      parts.push('<path d="M43 27l7-15 7 15z" fill="#FFD166" stroke="#C99A2E" stroke-width="1.5" stroke-linejoin="round"/>');
+      parts.push('<path d="M33 29l-4-10 9 3zM67 29l4-10-9 3z" fill="' + light + '" stroke="' + line + '" stroke-width="1.2" stroke-linejoin="round"/>');
     }
     if (species === 'whale') {
-      parts.push('<path d="M' + (cx - 4) + ' ' + (headCy - hy + 2) + 'q4 -12 8 0" stroke="#A5D8FF" stroke-width="3" fill="none" stroke-linecap="round"/>');
-      parts.push('<ellipse cx="' + cx + '" cy="' + (headCy + hy - 5) + '" rx="9" ry="5" fill="#A5D8FF"/>');
+      parts.push('<ellipse cx="50" cy="60" rx="14" ry="8" fill="#BFE3FF" opacity="0.9"/>');
     }
 
-    // 眼睛（心情差就画成扁扁的）
+    // 眼睛（大眼 + 双高光 + 上睫毛）
     if (moodLow) {
-      parts.push('<path d="M' + (cx - 8) + ' ' + (headCy - 2) + 'h5M' + (cx + 3) + ' ' + (headCy - 2) + 'h5" stroke="#22304A" stroke-width="2.2" stroke-linecap="round"/>');
+      parts.push('<path d="M34 50h10M56 50h10" stroke="' + eyeInk + '" stroke-width="2.6" stroke-linecap="round"/>');
     } else {
-      parts.push('<ellipse cx="' + (cx - 5.5) + '" cy="' + (headCy - 2) + '" rx="2.6" ry="3.2" fill="#22304A"/>');
-      parts.push('<ellipse cx="' + (cx + 5.5) + '" cy="' + (headCy - 2) + '" rx="2.6" ry="3.2" fill="#22304A"/>');
-      parts.push('<circle cx="' + (cx - 4.6) + '" cy="' + (headCy - 3.2) + '" r="0.9" fill="#fff"/>');
-      parts.push('<circle cx="' + (cx + 6.4) + '" cy="' + (headCy - 3.2) + '" r="0.9" fill="#fff"/>');
+      parts.push('<ellipse cx="39" cy="50" rx="5.4" ry="6.6" fill="url(#e' + uid + ')"/>');
+      parts.push('<ellipse cx="61" cy="50" rx="5.4" ry="6.6" fill="url(#e' + uid + ')"/>');
+      parts.push('<circle cx="37" cy="47.2" r="2" fill="#fff"/><circle cx="59" cy="47.2" r="2" fill="#fff"/>');
+      parts.push('<circle cx="41" cy="52.8" r="1" fill="#fff" opacity="0.9"/><circle cx="63" cy="52.8" r="1" fill="#fff" opacity="0.9"/>');
+      parts.push('<path d="M33 43q6-3 11-1M56 42q5-2 11 1" stroke="' + line + '" stroke-width="1.6" stroke-linecap="round"/>');
     }
-    // 腮红
-    parts.push('<ellipse cx="' + (cx - 11) + '" cy="' + (headCy + 4) + '" rx="3.4" ry="2.2" fill="rgba(255,120,150,0.45)"/>');
-    parts.push('<ellipse cx="' + (cx + 11) + '" cy="' + (headCy + 4) + '" rx="3.4" ry="2.2" fill="rgba(255,120,150,0.45)"/>');
+    parts.push('<ellipse cx="29" cy="58" rx="5" ry="3" fill="rgba(255,120,150,0.42)"/>');
+    parts.push('<ellipse cx="71" cy="58" rx="5" ry="3" fill="rgba(255,120,150,0.42)"/>');
+    parts.push(moodLow
+      ? '<path d="M45 62h10" stroke="' + eyeInk + '" stroke-width="1.8" stroke-linecap="round"/>'
+      : '<path d="M45 61q5 4 10 0" stroke="' + eyeInk + '" stroke-width="1.8" fill="none" stroke-linecap="round"/>');
 
     if (elder) {
-      parts.push('<ellipse cx="' + cx + '" cy="' + headCy + '" rx="' + hx + '" ry="' + hy + '" fill="rgba(255,255,255,0.28)"/>');
-      parts.push('<path d="M' + (cx - 6) + ' ' + (headCy + 8) + 'q6 3 12 0" stroke="#22304A" stroke-width="1.6" fill="none" stroke-linecap="round"/>');
+      parts.push('<ellipse cx="50" cy="50" rx="27" ry="24" fill="rgba(255,255,255,0.26)"/>');
+      parts.push('<path d="M37 57q6 6 13 3M63 60q-4 2-6-1" stroke="#7A8396" stroke-width="1.6" fill="none" stroke-linecap="round"/>');
     }
     if (o.sick) {
-      parts.push('<circle cx="' + (cx + hx + 2) + '" cy="' + (headCy - hy + 2) + '" r="6" fill="#FFF3F3" stroke="#E03131" stroke-width="1.5"/>');
-      parts.push('<path d="M' + (cx + hx + 2) + ' ' + (headCy - hy - 1) + 'v4M' + (cx + hx + 2) + ' ' + (headCy - hy + 4) + 'v0.5" stroke="#E03131" stroke-width="2" stroke-linecap="round"/>');
+      parts.push('<circle cx="78" cy="29" r="9" fill="#FFF3F3" stroke="#E03131" stroke-width="1.8"/>');
+      parts.push('<path d="M78 24v6M75 27h6" stroke="#E03131" stroke-width="2" stroke-linecap="round"/>');
+      parts.push('<path d="M65 37q3 4 1 7" stroke="#8FB8FF" stroke-width="2" fill="none" stroke-linecap="round"/>');
     }
-    return '<svg viewBox="0 0 84 92" fill="none">' + parts.join('') + '</svg>';
+
+    return '<svg viewBox="0 0 100 112" fill="none">' +
+      '<g transform="translate(50 106) scale(' + k + ') translate(-50 -106)">' + parts.join('') + '</g>' +
+      '</svg>';
   }
 
   function petBar(label, cls, val) {
@@ -1504,7 +1566,7 @@
     S.savePet(st);
 
     var snap = window.WB.petSnapshot(st, Date.now());
-    $('petVisual').innerHTML = petSvg(snap.species, snap.stage, { sick: snap.sick, mood: snap.mood });
+    $('petVisual').innerHTML = petSvg(snap.species, snap.stage, { sick: snap.sick, mood: snap.mood, hatch: snap.hatchProgress });
     $('petName').textContent = snap.name;
     $('petStage').hidden = false;
     $('petStage').textContent = snap.stageName + ' · ' + snap.ageDays + ' 天';

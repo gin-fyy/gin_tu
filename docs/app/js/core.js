@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.6.1';
+  var APP_VERSION = '1.7.0';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -526,24 +526,29 @@
     wallpaperUrl = '';
   }
 
-  // 显示用的地址：优先 blob:（清晰、省内存），没有就先用 dataURL；准备好后回调通知
+  // 显示用的地址：优先 blob:（清晰、省内存）；有 IndexedDB 时**不**退回几 MB 的 dataURL（解码慢又占内存）
   function getWallpaperDisplayUrl(onReady) {
     if (wallpaperUrl) {
       if (onReady) onReady(wallpaperUrl);
       return wallpaperUrl;
     }
     if (!wallpaperMem) return '';
+    var hasIdb = false;
     try {
-      if (typeof indexedDB !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {
-        idbGet('wallpaperBlob').then(function (blob) {
-          if (blob && typeof blob === 'object' && blob.size) {
-            try { wallpaperUrl = URL.createObjectURL(blob); } catch (e) { wallpaperUrl = ''; }
-            if (wallpaperUrl && onReady) onReady(wallpaperUrl);
-          }
-        }).catch(function () { /* ignore */ });
+      hasIdb = (typeof indexedDB !== 'undefined') && (typeof URL !== 'undefined') && !!URL.createObjectURL;
+    } catch (e) { hasIdb = false; }
+    if (!hasIdb) return wallpaperMem;      // 没有 IndexedDB 才退回 dataURL
+    idbGet('wallpaperBlob').then(function (blob) {
+      if (blob && typeof blob === 'object' && blob.size) {
+        try { wallpaperUrl = URL.createObjectURL(blob); } catch (e) { wallpaperUrl = ''; }
       }
-    } catch (e) { /* ignore */ }
-    return wallpaperMem;
+      if (!wallpaperUrl) wallpaperUrl = wallpaperMem;
+      if (onReady) onReady(wallpaperUrl);
+    }).catch(function () {
+      wallpaperUrl = wallpaperMem;
+      if (onReady) onReady(wallpaperMem);
+    });
+    return '';   // 让调用方等回调，别先把 dataURL 塞进 DOM
   }
 
   // 自定义壁纸应该压到多大：按屏幕尺寸来，长边不超过 maxEdge，别把清晰度白白丢掉
