@@ -619,6 +619,8 @@
     // 版本 / 更新地址
     $('confirmDoneSwitch').checked = s.confirmDone !== false;
     $('petMortalSwitch').checked = s.petMortal !== false;
+    $('sprite3dSwitch').checked = s.sprite3d === true;
+    $('spriteAiSwitch').checked = s.spriteAi !== false;
     $('versionLine').textContent = LOCAL_VERSION.version + (LOCAL_VERSION.versionCode ? ' (' + LOCAL_VERSION.versionCode + ')' : '');
     var ub = $('updateBaseInput');
     if (document.activeElement !== ub) ub.value = s.updateBase || '';
@@ -1011,6 +1013,26 @@
     $('aiState').textContent = key
       ? '✓ 已配置 AI，可以点「选图片识别」（拍/选一张课表截图）'
       : '还没配置 AI：图片识别需要它；不想配也可以直接用下面的文字导入。';
+    var chatKey = String(s.chatKey || '').trim();
+    if ($('aiChatEndpoint')) $('aiChatEndpoint').value = s.chatEndpoint || 'https://api.deepseek.com/v1';
+    if ($('aiChatModel')) $('aiChatModel').value = s.chatModel || 'deepseek-chat';
+    if ($('aiChatKey')) {
+      $('aiChatKey').value = chatKey
+        ? ('已保存 ' + '•'.repeat(Math.max(4, Math.min(12, chatKey.length - 4))) + chatKey.slice(-4))
+        : '';
+    }
+  }
+
+  function saveChatConfig() {
+    var key = ($('aiChatKey').value || '').trim();
+    var patch = {
+      chatEndpoint: ($('aiChatEndpoint').value || '').trim() || 'https://api.deepseek.com/v1',
+      chatModel: ($('aiChatModel').value || '').trim() || 'deepseek-chat'
+    };
+    if (key && key.indexOf('已保存') !== 0 && key.indexOf('•') !== 0) patch.chatKey = key;
+    S.saveSettings(patch);
+    fillAiConfig();
+    toast((patch.chatKey || S.getSettings().chatKey) ? '精灵聊天 Key 已保存（只在本机）' : '已保存聊天接口设置');
   }
 
   function saveAiConfig() {
@@ -1942,6 +1964,123 @@
     try { Native.cancel({ notifications: [{ id: 9001 }] }).catch(function () {}); } catch (e) { /* ignore */ }
   }
 
+  /* ===================== 3D 精灵（按需加载 three.js） ===================== */
+  var sprite3dReady = false;
+
+  function loadScriptOnce(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = function () { resolve(true); };
+      s.onerror = function () { reject(new Error('load ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function ensure3D() {
+    if (sprite3dReady && window.WBSprite) return Promise.resolve(true);
+    return loadScriptOnce('vendor/three.min.js')
+      .then(function () { return loadScriptOnce('vendor/GLTFLoader.js'); })
+      .then(function () { return loadScriptOnce('js/sprite3d.js'); })
+      .then(function () { sprite3dReady = true; return true; });
+  }
+
+  function applySprite() {
+    var want = S.getSettings().sprite3d === true;
+    var onHome = (state.view || 'home') === 'home';
+    if (!want) {
+      if (window.WBSprite && window.WBSprite.isMounted()) window.WBSprite.destroy();
+      return;
+    }
+    if (!onHome) {
+      if (window.WBSprite && window.WBSprite.isMounted()) window.WBSprite.setVisible(false);
+      return;
+    }
+    if (window.WBSprite && window.WBSprite.isMounted()) { window.WBSprite.setVisible(true); return; }
+    ensure3D().then(function () {
+      if (!window.WBSprite) return;
+      if (!window.WBSprite.hasWebGL()) { toast('这台设备不支持 WebGL，3D 精灵用不了'); return; }
+      var ok = window.WBSprite.mount({
+        container: document.body,
+        modelUrl: 'models/pet.glb',      // 有就用你的模型，没有就用程序化小鲸灵
+        onTap: spriteTap
+      });
+      if (!ok) toast('3D 精灵启动失败（设备可能不支持 WebGL）');
+    }).catch(function () { toast('3D 组件加载失败，检查网络后重开 App'); });
+  }
+
+  function spriteTap() {
+    if (!window.WBSprite) return;
+    var pet = S.getPet();
+    var name = (pet && pet.name) ? pet.name : '小精灵';
+    if (S.getSettings().spriteAi !== true) {
+      window.WBSprite.react('happy');
+      window.WBSprite.say(window.WB.spriteLine('neutral', Date.now()));
+      return;
+    }
+    var key = String(S.getSettings().chatKey || S.getSettings().aiKey || '').trim();
+    if (!key) {
+      var intent0 = window.WB.spriteIntent('');
+      window.WBSprite.react(intent0);
+      window.WBSprite.say(window.WB.spriteLine(intent0, Date.now()) + '\n（想真聊天：我的 → AI 配置 里填个 Key）');
+      return;
+    }
+    window.WBSprite.say('唔…让我想想');
+    spriteAskAi(name).then(function (r) {
+      window.WBSprite.react(r.intent);
+      window.WBSprite.say(r.text);
+    }).catch(function () {
+      window.WBSprite.react('sad');
+      window.WBSprite.say(window.WB.spriteLine('sad', Date.now()) + '（网络不太好）');
+    });
+  }
+
+  function spriteAskAi(name) {
+    var s = S.getSettings();
+    var url = String(s.chatEndpoint || 'https://api.deepseek.com/v1').trim();
+    if (url.indexOf('/chat/completions') < 0) url = url.replace(/\/+$/, '') + '/chat/completions';
+    var chatKey = String(s.chatKey || s.aiKey || '').trim();
+    var payload = {
+      model: s.chatModel || 'deepseek-chat',
+      temperature: 0.95,
+      max_tokens: 160,
+      messages: [
+        {
+          role: 'system',
+          content: '你是住在学习工作台 App 首页的一只小鲸灵，名字叫「' + name +
+            '」。请用中文说一句很短的话（30 字以内），语气可爱、偶尔小毒舌。' +
+            '结尾可加情绪标记，只能从这几个里选一个：[[happy]] [[sad]] [[angry]] [[shy]] [[sleepy]] [[excited]]'
+        },
+        { role: 'user', content: '（用户点了你一下）' }
+      ]
+    };
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var timer = setTimeout(function () {
+        if (!done) { done = true; reject(new Error('timeout')); }
+      }, 25000);
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + chatKey },
+        body: JSON.stringify(payload)
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        var text = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+        if (!text) { reject(new Error('empty')); return; }
+        text = String(text).trim();
+        var tag = text.match(/\[\[\s*(happy|sad|angry|shy|sleepy|excited|neutral)\s*\]\]/i);
+        var intent = tag ? tag[1].toLowerCase() : window.WB.spriteIntent(text);
+        if (tag) text = text.replace(tag[0], '').trim();
+        resolve({ text: text, intent: intent });
+      }).catch(function (e) {
+        if (!done) { done = true; clearTimeout(timer); reject(e); }
+      });
+    });
+  }
+
   /* ===================== 视图切换 ===================== */
   function showView(name) {
     state.view = name;
@@ -1953,6 +2092,7 @@
     });
     $('fabNew').hidden = (name === 'stats' || name === 'mine');
     renderAll();          // 切过去时再渲染这个页面（配合上面的"只画当前页"）
+    applySprite();        // 3D 精灵只在首页显示
     window.scrollTo(0, 0);
     try { localStorage.setItem('wb_view', name); } catch (e) { /* ignore */ }
   }
@@ -2328,6 +2468,7 @@
     $('ciDo').addEventListener('click', doCourseImport);
     $('ciToggleAi').addEventListener('click', function () { $('aiCfg').hidden = !$('aiCfg').hidden; });
     $('aiSave').addEventListener('click', saveAiConfig);
+    $('aiChatSave').addEventListener('click', saveChatConfig);
     $('aiTest').addEventListener('click', testAiConnection);
     $('ciImageBtn').addEventListener('click', function () {
       if (!aiKeyOf()) {
@@ -2452,6 +2593,19 @@
       renderPet();
     });
 
+    $('sprite3dSwitch').addEventListener('change', function (e) {
+      var on = !!e.target.checked;
+      S.saveSettings({ sprite3d: on });
+      if (!on) { if (window.WBSprite) window.WBSprite.destroy(); toast('已关闭 3D 精灵'); return; }
+      applySprite();
+      toast('3D 精灵已开启（点它说话，拖着它走）');
+    });
+    $('spriteAiSwitch').addEventListener('change', function (e) {
+      var on = !!e.target.checked;
+      S.saveSettings({ spriteAi: on });
+      toast(on ? '点头像会用 AI 聊天' : '精灵只说内置台词');
+    });
+
     $('exportBtn').addEventListener('click', exportFile);
     $('copyBtn').addEventListener('click', copyJson);
     $('importBtn').addEventListener('click', function () { $('importText').value = ''; openSheet('import'); });
@@ -2545,6 +2699,9 @@
     // 宠物：时间会流逝（饿/心情/健康/变老），每分钟算一次
     renderPet();
     setInterval(renderPet, 60 * 1000);
+
+    // 3D 精灵（默认关，开了才加载 three.js）
+    applySprite();
 
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) { checkReminders(); renderAll(); checkUpdateAuto(); }

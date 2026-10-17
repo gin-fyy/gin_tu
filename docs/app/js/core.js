@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.7.1';
+  var APP_VERSION = '1.8.0';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -376,9 +376,14 @@
         glassBlur: 18,      // 玻璃模糊强度 px
         wheelSource: 'custom', // 转盘选项来源：custom | tasks
         petMortal: true,       // 宠物是否遵循生老病死（关掉就只变老、不会离世）
+        sprite3d: false,       // 3D 精灵（WebGL；默认关，开了才加载 three.js）
+        spriteAi: true,        // 点精灵时用 AI 聊天（没填 Key 就用内置台词）
         aiEndpoint: AI_DEFAULT_ENDPOINT,  // 图片识别课表的视觉模型接口
         aiModel: AI_DEFAULT_MODEL,
         aiKey: '',                          // 只存在本机，不会上传到别处
+        chatEndpoint: 'https://api.deepseek.com/v1',  // 3D 精灵聊天（DeepSeek，OpenAI 兼容）
+        chatModel: 'deepseek-chat',
+        chatKey: '',                        // 精灵聊天 Key：同样只存本机，代码里没有
         periods: null                       // 节次时间表（null = 用内置默认作息）
       },
       read(KEY_SETTINGS, {})
@@ -610,6 +615,42 @@
       id: preset.id,
       url: preset.gradient ? '' : preset.image
     };
+  }
+
+  /* ===================== 3D 精灵：语气识别 + 兜底台词 ===================== */
+  var SPRITE_LINES = {
+    happy: ['嘿嘿，被你点到啦', '今天也要好好学哦！', '我在这儿陪你～'],
+    sad: ['唔…有点难过', '陪我待一会儿吧', '我会努力的…'],
+    angry: ['哼！不理你了', '你又偷懒！', '我生气了哦'],
+    shy: ['别、别看我啦', '才没有很高兴呢', '（脸红）'],
+    sleepy: ['呼…好困', '让我睡五分钟…', 'Zzz…'],
+    excited: ['哇！好耶！', '我们冲！', '今天状态超好！'],
+    neutral: ['你来啦', '在忙什么呀', '有事就叫我']
+  };
+
+  function spriteIntent(text) {
+    var s = String(text || '').toLowerCase();
+    if (!s) return 'neutral';
+    var rules = [
+      ['sad', ['难过', '伤心', '不开心', '哭', '委屈', '好累', 'sad', 'tired', '😢', '😭']],
+      ['angry', ['生气', '讨厌', '烦死', '气死', '哼', 'angry', '😠', '😡']],
+      ['sleepy', ['困', '睡', '晚安', 'sleepy', 'zzz', '😪', '🥱']],
+      ['excited', ['太棒', '好耶', '冲', '成功', '完成', 'awesome', 'great', 'excited', '🎉', '😆']],
+      ['shy', ['害羞', '脸红', '喜欢', '可爱', 'shy', 'blush', '😳', '🥰']],
+      ['happy', ['开心', '高兴', '哈哈', '嘿嘿', '谢谢', 'happy', 'nice', '😄', '😊', '🙂']]
+    ];
+    for (var i = 0; i < rules.length; i++) {
+      for (var j = 0; j < rules[i][1].length; j++) {
+        if (s.indexOf(rules[i][1][j]) >= 0) return rules[i][0];
+      }
+    }
+    return 'neutral';
+  }
+
+  function spriteLine(intent, seed) {
+    var list = SPRITE_LINES[intent] || SPRITE_LINES.neutral;
+    var n = Math.abs(Number(seed) || Math.floor(Math.random() * 1e9));
+    return list[n % list.length];
   }
 
   /* ===================== 虚拟宠物（养崽） =====================
@@ -1842,6 +1883,9 @@
     petHeal: petHeal,
     petSnapshot: petSnapshot,
     petHatchProgress: petHatchProgress,
+    spriteIntent: spriteIntent,
+    spriteLine: spriteLine,
+    SPRITE_LINES: SPRITE_LINES,
     QUOTES: QUOTES,
     quoteOfDay: quoteOfDay,
     randomQuote: randomQuote,

@@ -259,6 +259,20 @@
           </div>
           <input type="checkbox" id="petMortalSwitch" class="switch" checked />
         </div>
+        <div class="switch-row" style="margin-top:12px">
+          <div class="switch-left">
+            <div class="s-title">3D 精灵</div>
+            <div class="s-sub">首页放一只会走会跳的 3D 小鲸灵（WebGL，可拖拽、点它说话）；关掉就不加载，更省电</div>
+          </div>
+          <input type="checkbox" id="sprite3dSwitch" class="switch" />
+        </div>
+        <div class="switch-row" style="margin-top:12px">
+          <div class="switch-left">
+            <div class="s-title">精灵会聊天（AI）</div>
+            <div class="s-sub">点精灵时用「AI 配置」里的接口聊一句；没填 Key 就用内置台词</div>
+          </div>
+          <input type="checkbox" id="spriteAiSwitch" class="switch" checked />
+        </div>
       </div>
 
       <div class="card">
@@ -502,6 +516,24 @@
         <div class="row">
           <button class="mini-btn" id="aiSave">保存 AI 配置</button>
           <button class="mini-btn ghost" id="aiTest">测试连接</button>
+        </div>
+
+        <div style="height:1px;background:var(--border);margin:14px 0"></div>
+        <div class="tip">下面这段是给 <b>3D 精灵聊天</b>用的（可选，和上面的图片识别互不影响）。推荐 <b>DeepSeek</b>：到 platform.deepseek.com 注册拿 Key，填进来就行；Key 只存本机、不会进代码。</div>
+        <label class="field" style="margin-top:8px">
+          <span class="field-label">聊天接口</span>
+          <input id="aiChatEndpoint" placeholder="https://api.deepseek.com/v1" />
+        </label>
+        <label class="field">
+          <span class="field-label">聊天模型</span>
+          <input id="aiChatModel" placeholder="deepseek-chat" />
+        </label>
+        <label class="field">
+          <span class="field-label">聊天 Key</span>
+          <input id="aiChatKey" placeholder="sk-...（只存本机）" />
+        </label>
+        <div class="row">
+          <button class="mini-btn" id="aiChatSave">保存聊天配置</button>
         </div>
       </div>
 

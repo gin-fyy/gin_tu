@@ -1031,6 +1031,21 @@ function makeCases(mode) {
     ok(r.state.hatchedAt > 0, '两段番茄（40 经验）应该能孵化：' + r.state.hatchedAt);
   };
 
+  cases['3D 精灵: 语气识别 + 兜底台词'] = (WB) => {
+    eq(WB.spriteIntent('今天好开心哈哈'), 'happy');
+    eq(WB.spriteIntent('我好难过'), 'sad');
+    eq(WB.spriteIntent('气死我了哼'), 'angry');
+    eq(WB.spriteIntent('好困，想睡了'), 'sleepy');
+    eq(WB.spriteIntent('太棒了，完成了！'), 'excited');
+    eq(WB.spriteIntent('别看我，好害羞'), 'shy');
+    eq(WB.spriteIntent('今天天气还行'), 'neutral');
+    eq(WB.spriteIntent(''), 'neutral');
+    var line = WB.spriteLine('happy', 3);
+    ok(WB.SPRITE_LINES.happy.indexOf(line) >= 0, 'happy 台词应来自列表：' + line);
+    eq(WB.spriteLine('happy', 3), line);
+    ok(WB.spriteLine('unknownIntent', 1).length > 0, '未知语气也要能出词');
+  };
+
   return cases;
 }
 
