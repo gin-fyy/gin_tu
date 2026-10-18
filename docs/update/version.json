@@ -1,15 +1,15 @@
 {
-  "version": "1.9.2",
-  "versionCode": 33,
-  "apk": "workbench-1.9.2.apk",
-  "size": 6400744,
-  "sha256": "b1721732dd18a883f4e0c1d0350a7d627b50af2a25cbb1ea7bebb96e46f73672",
-  "builtAt": "2026-10-18T13:18:08.432Z",
+  "version": "1.9.3",
+  "versionCode": 34,
+  "apk": "workbench-1.9.3.apk",
+  "size": 6401362,
+  "sha256": "a2d6be508f6073b14ae3dfc31f133d36c040be049a4a5ca82fabfc9f2ffa5630",
+  "builtAt": "2026-10-18T13:25:02.485Z",
   "notes": [
-    "**找到\"壁纸不显示 + 3D 加载不出来\"的真根因：App 里的 Service Worker**",
-    "它在 APK 里对本地文件也走\"网络优先\"，网络拿不到时**没有超时、一直挂着** → 新增的图片/脚本（内置壁纸、three.js、立绘）永远加载不出来，而且**不报错**",
-    "修复：**原生 App 里不再注册 SW**，并把历史注册的 SW 全部注销、清掉旧缓存；网页版保留 SW，但加了 3 秒超时回落缓存",
-    "**内置壁纸全部改成纯 CSS 渐变**（樱霞/夜色/薄荷/蜜桃/墨玉）：任何分辨率都不糊，也不占体积（之前那张位图被拉伸才显得模糊）",
-    "诊断里新增 WebGL 显卡型号、内置壁纸的 img 加载状态"
+    "**诊断信息再加三块关键证据**：",
+    "**Service Worker 注册数 / 是否控制本页**（这次\"壁纸和 3D 都不出来\"的元凶就是它）",
+    "**每个资源的真实加载耗时**（`performance` 记录：文件、耗时、字节数、HTTP 状态）—— 请求\"挂住\"会直接暴露",
+    "页面真实地址、3D 组件是否已加载",
+    "WebView 调试本来就在 `capacitor.config.json` 里开着（`webContentsDebuggingEnabled: true`）→ 可以用电脑 Chrome 的 `chrome://inspect` 直接连上手机看控制台/网络（前提：手机开 USB 调试）"
   ]
 }

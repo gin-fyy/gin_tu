@@ -3,6 +3,14 @@
 > 发版时在这里加一段（最新的放最上面）。打包脚本会把**对应版本那一段**写进 `version.json` 的 `notes`，
 > App 的更新弹窗就显示这些内容。写法：`## 版本号` 开头，下面每行用 `- ` 列一条。
 
+## 1.9.3
+
+- **诊断信息再加三块关键证据**：
+  - **Service Worker 注册数 / 是否控制本页**（这次"壁纸和 3D 都不出来"的元凶就是它）
+  - **每个资源的真实加载耗时**（`performance` 记录：文件、耗时、字节数、HTTP 状态）—— 请求"挂住"会直接暴露
+  - 页面真实地址、3D 组件是否已加载
+- WebView 调试本来就在 `capacitor.config.json` 里开着（`webContentsDebuggingEnabled: true`）→ 可以用电脑 Chrome 的 `chrome://inspect` 直接连上手机看控制台/网络（前提：手机开 USB 调试）
+
 ## 1.9.2
 
 - **找到"壁纸不显示 + 3D 加载不出来"的真根因：App 里的 Service Worker**

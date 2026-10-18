@@ -2012,6 +2012,20 @@
     } catch (e) { return '异常：' + (e && e.message); }
   }
 
+  // 每个资源的真实加载耗时：挂住的请求会显示超大 duration 或 0 字节，一眼看出问题
+  function diagResources() {
+    try {
+      var list = performance.getEntriesByType('resource') || [];
+      if (!list.length) return '(无资源记录)';
+      return list.slice(-14).map(function (e) {
+        var parts = String(e.name || '').split('/');
+        var name = parts.slice(-2).join('/');
+        var st = (e.responseStatus !== undefined && e.responseStatus !== 0) ? (' · HTTP ' + e.responseStatus) : '';
+        return '· ' + name + ' · ' + Math.round(e.duration) + 'ms · ' + (e.transferSize || 0) + 'B' + st;
+      }).join('\n');
+    } catch (e) { return '异常：' + (e && e.message); }
+  }
+
   function collectDiag() {
     var out = [];
     out.push('=== 工作台诊断 ' + new Date().toISOString() + ' ===');
@@ -2029,26 +2043,47 @@
     out.push('--- 更新 ---');
     out.push('更新地址数: ' + updateBases().length);
     out.push('上次更新提示: ' + ($('updHint') ? ($('updHint').textContent || '(空)') : '(无)'));
+    out.push('--- 页面 ---');
+    out.push('地址: ' + String(location.href || '').slice(0, 120));
+    out.push('3D 组件: ' + (window.WBSprite ? '已加载' : '未加载') + ' / 脚本就绪=' + sprite3dReady);
+    out.push('--- 资源加载（最近 14 个） ---');
+    out.push(diagResources());
     out.push('--- 最后报错 ---');
     out.push(window.__wbErr || '(无)');
     return out.join('\n');
   }
 
   function runDiag() {
-    var text = '';
-    try { text = collectDiag(); } catch (e) { text = '诊断本身出错：' + (e && e.message); }
-    $('diagOut').value = text;
-    var copied = false;
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text);
-        copied = true;
+    var base = '';
+    try { base = collectDiag(); } catch (e) { base = '诊断本身出错：' + (e && e.message); }
+
+    function finish(extra) {
+      var text = base + (extra || '');
+      $('diagOut').value = text;
+      var copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text);
+          copied = true;
+        }
+      } catch (e) { copied = false; }
+      if (!copied) {
+        try { $('diagOut').select(); copied = document.execCommand('copy'); } catch (e) { copied = false; }
       }
-    } catch (e) { copied = false; }
-    if (!copied) {
-      try { $('diagOut').select(); copied = document.execCommand('copy'); } catch (e) { copied = false; }
+      toast(copied ? '诊断信息已复制，直接粘给我' : '诊断已生成，请长按文本框手动复制');
     }
-    toast(copied ? '诊断信息已复制，直接粘给我' : '诊断已生成，请长按文本框手动复制');
+
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        navigator.serviceWorker.getRegistrations().then(function (list) {
+          var arr = list || [];
+          var urls = arr.map(function (r) { return (r.active && r.active.scriptURL) || r.scope || ''; });
+          finish('\n--- Service Worker ---\n注册数: ' + arr.length + '\n控制本页: ' + !!navigator.serviceWorker.controller + '\n' + urls.join('\n'));
+        }).catch(function () { finish('\n--- Service Worker ---\n读取失败'); });
+        return;
+      }
+    } catch (e) { /* ignore */ }
+    finish('');
   }
 
   /* ===================== 3D 精灵（按需加载 three.js） ===================== */
