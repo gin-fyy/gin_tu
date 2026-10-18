@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>桌宠</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: transparent;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+  #pet {
+    position: absolute; left: 50%; bottom: 6%;
+    transform: translateX(-50%);
+    height: 92%; width: auto;
+    transform-origin: 50% 100%;
+    will-change: transform;
+    pointer-events: none;
+    filter: drop-shadow(0 6px 10px rgba(10, 14, 30, 0.28));
+    transition: filter 0.2s ease;
+  }
+  #pet.happy { filter: drop-shadow(0 0 14px rgba(120, 190, 255, 0.85)); }
+  #hint {
+    position: absolute; left: 0; right: 0; top: 8px;
+    text-align: center; font-size: 11px; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    opacity: 0; transition: opacity 0.25s ease;
+    font-family: "Microsoft YaHei", sans-serif;
+    pointer-events: none;
+  }
+  #hint.on { opacity: 1; }
+</style>
+</head>
+<body>
+  <img id="pet" src="img/pet-whale-front.webp" alt="" draggable="false" />
+  <div id="hint"></div>
+
+<script>
+(function () {
+  var pet = document.getElementById('pet');
+  var hint = document.getElementById('hint');
+  var VIEWS = {
+    front: 'img/pet-whale-front.webp',
+    side: 'img/pet-whale-side.webp',
+    back: 'img/pet-whale-back.webp'
+  };
+  var cache = {};
+  Object.keys(VIEWS).forEach(function (k) {
+    var im = new Image();
+    im.src = VIEWS[k];
+    cache[k] = im;
+  });
+
+  var bridge = window.PetBridge || null;
+  var state = {
+    view: 'front',
+    facing: 1,
+    bob: 0,
+    hop: 0,
+    dragging: false,
+    moved: 0,
+    last: null,
+    pressTimer: 0,
+    vel: { x: 0, y: 0 }
+  };
+
+  function setView(v) {
+    if (state.view === v) return;
+    state.view = v;
+    pet.src = VIEWS[v] || VIEWS.front;
+  }
+
+  function say(text) {
+    hint.textContent = text || '';
+    hint.classList.add('on');
+    clearTimeout(say._t);
+    say._t = setTimeout(function () { hint.classList.remove('on'); }, 1400);
+  }
+
+  // 呼吸 + 跳
+  function animate(now) {
+    requestAnimationFrame(animate);
+    var t = now / 1000;
+    if (state.hop > 0) state.hop = Math.max(0, state.hop - 0.045);
+    var hopY = Math.sin((1 - state.hop) * Math.PI) * 16 * (state.hop > 0 ? 1 : 0);
+    var breathe = Math.sin(t * 1.6) * 1.6;
+    var sway = Math.sin(t * 0.9) * 2.2;
+    pet.style.transform = 'translateX(-50%) translateY(' + (-hopY - breathe).toFixed(1) + 'px) rotate(' + sway.toFixed(2) + 'deg) scaleX(' + state.facing + ')';
+    // 甩抛惯性
+    if (!state.dragging && (Math.abs(state.vel.x) > 0.4 || Math.abs(state.vel.y) > 0.4)) {
+      moveBy(state.vel.x, state.vel.y);
+      state.vel.x *= 0.9;
+      state.vel.y *= 0.9;
+    }
+  }
+  requestAnimationFrame(animate);
+
+  function moveBy(dx, dy) {
+    if (!bridge || !bridge.moveBy) return;
+    try { bridge.moveBy(Math.round(dx), Math.round(dy)); } catch (e) { /* ignore */ }
+  }
+
+  // 手指拖动窗口
+  function onDown(e) {
+    var p = e.touches ? e.touches[0] : e;
+    state.dragging = true;
+    state.moved = 0;
+    state.last = { x: p.clientX, y: p.clientY, t: Date.now() };
+    state.vel = { x: 0, y: 0 };
+    clearTimeout(state.pressTimer);
+    state.pressTimer = setTimeout(function () {
+      if (state.moved < 8) {
+        say('长按就能收起我');
+        if (bridge && bridge.hidePet) { try { bridge.hidePet(); } catch (err) { /* ignore */ } }
+      }
+    }, 1600);
+    e.preventDefault();
+  }
+
+  function onMove(e) {
+    if (!state.dragging) return;
+    var p = e.touches ? e.touches[0] : e;
+    var dx = p.clientX - state.last.x;
+    var dy = p.clientY - state.last.y;
+    state.moved += Math.abs(dx) + Math.abs(dy);
+    var dpr = window.devicePixelRatio || 1;
+    moveBy(dx * dpr, dy * dpr);
+    state.vel = { x: dx * dpr * 0.55, y: dy * dpr * 0.55 };
+    state.last = { x: p.clientX, y: p.clientY };
+    if (Math.abs(dx) > 1) state.facing = dx > 0 ? 1 : -1;
+    setView('side');
+    e.preventDefault();
+  }
+
+  function onUp() {
+    if (!state.dragging) return;
+    state.dragging = false;
+    clearTimeout(state.pressTimer);
+    setView('front');
+    if (state.moved < 9) {
+      // 点一下：跳 + 换表情
+      state.hop = 1;
+      pet.classList.add('happy');
+      setTimeout(function () { pet.classList.remove('happy'); }, 900);
+      say(pickLine());
+    }
+  }
+
+  var LINES = ['嘿嘿', '在呢在呢', '别戳我啦', '今天也要加油', '我陪你', '摸鱼被抓到了'];
+  function pickLine() { return LINES[Math.floor(Math.random() * LINES.length)]; }
+
+  // 自己溜达：慢慢在屏幕上走
+  setInterval(function () {
+    if (state.dragging) return;
+    var r = Math.random();
+    if (r < 0.45) {
+      var dpr = window.devicePixelRatio || 1;
+      var dx = (Math.random() > 0.5 ? 1 : -1) * (14 + Math.random() * 26) * dpr;
+      var dy = (Math.random() - 0.5) * 18 * dpr;
+      setView('side');
+      state.facing = dx > 0 ? 1 : -1;
+      moveBy(dx, dy);
+      setTimeout(function () { if (!state.dragging) setView('front'); }, 900);
+    } else if (r < 0.55) {
+      setView('back');
+      setTimeout(function () { if (!state.dragging) setView('front'); }, 1200);
+    }
+  }, 2600);
+
+  document.addEventListener('touchstart', onDown, { passive: false });
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchend', onUp);
+  document.addEventListener('touchcancel', onUp);
+  document.addEventListener('mousedown', function (e) { onDown(e); });
+  document.addEventListener('mousemove', function (e) { onMove(e); });
+  document.addEventListener('mouseup', onUp);
+
+  say('我来啦');
+})();
+</script>
+</body>
+</html>

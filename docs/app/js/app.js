@@ -621,6 +621,7 @@
     $('petMortalSwitch').checked = s.petMortal !== false;
     $('sprite3dSwitch').checked = s.sprite3d === true;
     $('spriteAiSwitch').checked = s.spriteAi !== false;
+    refreshPetOverlay();
     $('versionLine').textContent = LOCAL_VERSION.version + (LOCAL_VERSION.versionCode ? ' (' + LOCAL_VERSION.versionCode + ')' : '');
     var ub = $('updateBaseInput');
     if (document.activeElement !== ub) ub.value = s.updateBase || '';
@@ -692,11 +693,11 @@
       dim.hidden = false;
       dim.style.background = 'rgba(12,16,24,' + (w.dim / 100) + ')';
       document.body.classList.add('wb-wallpaper');
-      if (w.kind === 'custom' && w.url) {
-        // 自己的照片：只用 <img> 贴图；blob 就绪后再放上去（不塞几 MB 的 dataURL）
+      if (w.kind === 'custom') {
+        // 先用缩略图（localStorage，同步，一定能画出来），大图读好后无缝替换
         layer.style.backgroundImage = '';
-        var immediate = S.getWallpaperDisplayUrl(function (url) { place(url, false); });
-        if (immediate) place(immediate, usingThumb);
+        if (thumb) place(thumb, true);
+        S.getWallpaperDisplayUrl(function (url) { place(url, false); });
       } else if (w.kind === 'preset' && w.url) {
         // 内置壁纸也走 <img>：加载失败能显示在诊断里（CSS 背景失败是无声的）
         layer.style.backgroundImage = '';
@@ -2097,7 +2098,54 @@
     finish('');
   }
 
-  /* ===================== 3D 精灵（按需加载 three.js） ===================== */
+  /* ===================== 桌宠浮窗（原生悬浮窗） ===================== */
+  var PetOverlay = (function () {
+    try {
+      var C = window.Capacitor;
+      return (C && C.Plugins && C.Plugins.PetOverlay) ? C.Plugins.PetOverlay : null;
+    } catch (e) { return null; }
+  })();
+  var petOvSize = 168;
+
+  function renderPetOverlayState(info) {
+    var el = $('petOvState');
+    if (!el) return;
+    if (!PetOverlay) {
+      el.textContent = '状态：当前环境不支持悬浮窗（只有安卓 App 里能用）';
+      return;
+    }
+    var ok = info && info.allowed;
+    var showing = info && info.showing;
+    el.textContent = '状态：' + (ok ? '✅ 已授予悬浮窗权限' : '❌ 还没授予「显示在其他应用上层」') +
+      ' · ' + (showing ? '桌宠已放出来' : '桌宠没放出来');
+    if (info && info.sizeDp) {
+      petOvSize = info.sizeDp;
+      if ($('petOvSize')) $('petOvSize').value = String(petOvSize);
+      if ($('petOvSizeVal')) $('petOvSizeVal').textContent = petOvSize + ' dp';
+    }
+  }
+
+  function refreshPetOverlay() {
+    if (!PetOverlay) { renderPetOverlayState(null); return; }
+    try {
+      PetOverlay.canDraw().then(renderPetOverlayState).catch(function () { renderPetOverlayState(null); });
+    } catch (e) { renderPetOverlayState(null); }
+  }
+
+  function showPetOverlay() {
+    if (!PetOverlay) { toast('悬浮窗只有安卓 App 里能用'); return; }
+    PetOverlay.show({ sizeDp: petOvSize }).then(function (r) {
+      if (r && r.ok) { toast('桌宠已放出来，拖它试试'); renderPetOverlayState({ allowed: true, showing: true, sizeDp: petOvSize }); }
+      else toast('放不出来：' + ((r && r.reason) || '未知原因'));
+    }).catch(function (e) { toast('放不出来：' + ((e && e.message) || e)); });
+  }
+
+  function hidePetOverlay() {
+    if (!PetOverlay) return;
+    PetOverlay.hide().then(function () { toast('已收起来'); refreshPetOverlay(); }).catch(function () { /* ignore */ });
+  }
+
+
   var sprite3dReady = false;
 
   function loadScriptOnce(src) {
@@ -2769,6 +2817,25 @@
     });
     $('diagBtn').addEventListener('click', runDiag);
     $('wpPickAgain').addEventListener('click', function () { $('wpFile').click(); });
+
+    // 桌宠浮窗
+    $('petOvPerm').addEventListener('click', function () {
+      if (!PetOverlay) { toast('悬浮窗只有安卓 App 里能用'); return; }
+      PetOverlay.requestPermission().then(function () {
+        toast('请在系统里打开「允许显示在其他应用上层」，回来点「放出来」');
+        setTimeout(refreshPetOverlay, 800);
+      }).catch(function () { /* ignore */ });
+    });
+    $('petOvShow').addEventListener('click', showPetOverlay);
+    $('petOvHide').addEventListener('click', hidePetOverlay);
+    $('petOvSize').addEventListener('input', function (e) {
+      petOvSize = Number(e.target.value) || 168;
+      $('petOvSizeVal').textContent = petOvSize + ' dp';
+    });
+    $('petOvSize').addEventListener('change', function () {
+      if (!PetOverlay) return;
+      PetOverlay.setSize({ sizeDp: petOvSize }).catch(function () { /* ignore */ });
+    });
 
     $('exportBtn').addEventListener('click', exportFile);
     $('copyBtn').addEventListener('click', copyJson);

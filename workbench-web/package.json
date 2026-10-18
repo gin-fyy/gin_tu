@@ -1,6 +1,6 @@
 {
   "name": "workbench-web",
-  "version": "1.9.4",
+  "version": "2.0.0",
   "private": true,
   "description": "我的工作台：零依赖网页版（双击即用）+ Capacitor 安卓壳",
   "scripts": {
@@ -26,7 +26,8 @@
     "@capacitor/local-notifications": "^7.0.0",
     "@capgo/capacitor-updater": "^7.51.23",
     "apk-installer": "file:native-plugins/apk-installer",
-    "focus-lock": "file:native-plugins/focus-lock"
+    "focus-lock": "file:native-plugins/focus-lock",
+    "pet-overlay": "file:native-plugins/pet-overlay"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",

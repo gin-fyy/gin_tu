@@ -1,0 +1,13 @@
+{
+  "name": "pet-overlay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地 Capacitor 插件：把桌宠放到系统悬浮窗（显示在其他应用上层）",
+  "files": ["android/"],
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  }
+}

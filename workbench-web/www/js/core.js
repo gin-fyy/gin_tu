@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.9.4';
+  var APP_VERSION = '2.0.0';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -567,16 +567,24 @@
       hasIdb = (typeof indexedDB !== 'undefined') && (typeof URL !== 'undefined') && !!URL.createObjectURL;
     } catch (e) { hasIdb = false; }
     if (!hasIdb) return wallpaperMem;      // 没有 IndexedDB 才退回 dataURL
+    var called = false;
+    function reply(url) {
+      if (called) return;
+      called = true;
+      wallpaperUrl = url || wallpaperMem;
+      if (onReady) onReady(wallpaperUrl);
+    }
     idbGet('wallpaperBlob').then(function (blob) {
       if (blob && typeof blob === 'object' && blob.size) {
-        try { wallpaperUrl = URL.createObjectURL(blob); } catch (e) { wallpaperUrl = ''; }
+        var u = '';
+        try { u = URL.createObjectURL(blob); } catch (e) { u = ''; }
+        reply(u || wallpaperMem);
+      } else {
+        reply(wallpaperMem);
       }
-      if (!wallpaperUrl) wallpaperUrl = wallpaperMem;
-      if (onReady) onReady(wallpaperUrl);
-    }).catch(function () {
-      wallpaperUrl = wallpaperMem;
-      if (onReady) onReady(wallpaperMem);
-    });
+    }).catch(function () { reply(wallpaperMem); });
+    // 兜底：IndexedDB 万一卡住，1.5 秒后直接用 dataURL 顶上（宁可慢一点也不能白屏）
+    setTimeout(function () { if (!called) reply(wallpaperMem); }, 1500);
     return '';   // 让调用方等回调，别先把 dataURL 塞进 DOM
   }
 

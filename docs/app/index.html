@@ -281,6 +281,24 @@
       </div>
 
       <div class="card">
+        <div class="section-head">桌宠浮窗</div>
+        <div class="tip">把它放到系统最上层：**悬浮在微信、浏览器上面**，透明、可拖动、点一下有回应、自己会溜达。不用联网、没有 AI。</div>
+        <div class="tip" id="petOvState" style="margin-top:8px">状态：未开启</div>
+        <div class="row" style="margin-top:10px">
+          <button class="mini-btn ghost" id="petOvPerm">授予「显示在其他应用上层」</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="mini-btn" id="petOvShow">放出来</button>
+          <button class="mini-btn ghost" id="petOvHide">收起来</button>
+        </div>
+        <div class="row" style="margin-top:14px; align-items:center">
+          <span class="tip" style="flex:0 0 52px">大小</span>
+          <input type="range" id="petOvSize" min="96" max="300" step="12" value="168" />
+          <span class="tip" id="petOvSizeVal" style="flex:0 0 52px; text-align:right">168 dp</span>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="section-head">更新</div>
         <div class="row" style="justify-content:space-between">
           <span>当前版本</span>
