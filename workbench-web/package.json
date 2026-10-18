@@ -1,6 +1,6 @@
 {
   "name": "workbench-web",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "private": true,
   "description": "我的工作台：零依赖网页版（双击即用）+ Capacitor 安卓壳",
   "scripts": {

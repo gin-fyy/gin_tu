@@ -595,10 +595,10 @@ function makeCases(mode) {
     eq(w.image, '');
     eq(w.dim, 30);
 
-    // 内置预设（樱花是图片，其他是渐变）
+    // 内置预设：全部是纯渐变（位图预设会被拉伸变糊，所以不用了）
     w = WB.wallpaperCss({ wallpaper: 'sakura', wallpaperDim: 40 }, '');
     eq(w.kind, 'preset');
-    ok(w.image.indexOf('wallpaper-sakura.webp') > 0, '樱花壁纸应指向图片：' + w.image);
+    ok(w.image.indexOf('linear-gradient') === 0, '樱花壁纸应该是渐变：' + w.image);
     eq(w.dim, 40);
 
     w = WB.wallpaperCss({ wallpaper: 'dusk', wallpaperDim: 0 }, '');

@@ -490,8 +490,8 @@ function injectApkInstaller(w) {
     if ($(w, '#wallpaperLayer').hidden) throw new Error('壁纸层没显示');
     var src = $(w, '#wallpaperImg').getAttribute('src') || '';
     var bg = $(w, '#wallpaperLayer').style.backgroundImage || '';
-    if ((src + bg).indexOf('wallpaper-sakura') < 0) {
-      throw new Error('壁纸图片不对：img=' + src + ' bg=' + bg);
+    if ((src + bg).indexOf('gradient') < 0) {
+      throw new Error('壁纸背景不对：img=' + src + ' bg=' + bg);
     }
     if (w.WB.store.getSettings().wallpaper !== 'sakura') throw new Error('壁纸设置没存下来');
 

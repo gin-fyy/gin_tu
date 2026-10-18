@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '1.9.1';
+  var APP_VERSION = '1.9.2';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -47,9 +47,9 @@
   var KEY_WALLPAPER = 'wb_wallpaper_img';   // 自定义壁纸（压缩后的 dataURL，单独存避免撑大设置对象）
   var KEY_WP_THUMB = 'wb_wallpaper_thumb';  // 壁纸缩略图（几十 KB）：开机瞬间同步显示，避免"壁纸先没了再出现"
 
-  // 内置壁纸：image 可以是图片路径，也可以是纯 CSS 渐变（gradient: true）
+  // 内置壁纸：全部用纯 CSS 渐变 —— 任何屏幕分辨率都不会糊，也不占体积
   var WALLPAPERS = [
-    { id: 'sakura', name: '樱花', image: 'img/wallpaper-sakura.webp' },
+    { id: 'sakura', name: '樱霞', image: 'linear-gradient(165deg,#fde3ec,#f7c9dd 38%,#e7b6d8 62%,#9d7fbe 82%,#4a3a67)', gradient: true },
     { id: 'dusk', name: '夜色', image: 'linear-gradient(160deg,#141b2b,#33406b 55%,#6f5f9e)', gradient: true },
     { id: 'mint', name: '薄荷', image: 'linear-gradient(160deg,#dff3ec,#c3e2f6 60%,#e9e3fb)', gradient: true },
     { id: 'peach', name: '蜜桃', image: 'linear-gradient(160deg,#ffe8de,#ffd2e2 55%,#e8dcff)', gradient: true },

@@ -2758,10 +2758,29 @@
   function boot() {
     S.getCategories(); // 首次运行写入默认分类
 
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').catch(function () { /* 离线缓存失败不影响使用 */ });
-      });
+    // Service Worker 只在"网页版"注册。
+    // APK 里文件本身就在本地，SW 的"网络优先"会让请求一直挂着（新增图片/three.js 加载不出来），
+    // 所以原生环境要：不注册 + 把历史注册的 SW 注销掉。
+    var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    if ('serviceWorker' in navigator) {
+      if (isNative) {
+        navigator.serviceWorker.getRegistrations().then(function (list) {
+          (list || []).forEach(function (r) { try { r.unregister(); } catch (e) { /* ignore */ } });
+        }).catch(function () { /* ignore */ });
+        try {
+          if (window.caches && caches.keys) {
+            caches.keys().then(function (keys) {
+              (keys || []).forEach(function (k) {
+                if (String(k).indexOf('workbench') === 0) caches.delete(k).catch(function () {});
+              });
+            }).catch(function () { /* ignore */ });
+          }
+        } catch (e) { /* ignore */ }
+      } else if (location.protocol !== 'file:') {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('sw.js').catch(function () { /* 离线缓存失败不影响使用 */ });
+        });
+      }
     }
 
     bind();
