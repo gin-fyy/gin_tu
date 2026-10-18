@@ -488,8 +488,10 @@ function injectApkInstaller(w) {
     click(w, sakura);
     if (!w.document.body.classList.contains('wb-wallpaper')) throw new Error('选了壁纸但没生效');
     if ($(w, '#wallpaperLayer').hidden) throw new Error('壁纸层没显示');
-    if ($(w, '#wallpaperLayer').style.backgroundImage.indexOf('wallpaper-sakura') < 0) {
-      throw new Error('壁纸层图片不对：' + $(w, '#wallpaperLayer').style.backgroundImage);
+    var src = $(w, '#wallpaperImg').getAttribute('src') || '';
+    var bg = $(w, '#wallpaperLayer').style.backgroundImage || '';
+    if ((src + bg).indexOf('wallpaper-sakura') < 0) {
+      throw new Error('壁纸图片不对：img=' + src + ' bg=' + bg);
     }
     if (w.WB.store.getSettings().wallpaper !== 'sakura') throw new Error('壁纸设置没存下来');
 
@@ -792,7 +794,7 @@ function injectApkInstaller(w) {
     w.document.dispatchEvent(new w.Event('visibilitychange'));
     await sleep(60);
     var lostTxt = $(w, '#wpState').textContent;
-    if (lostTxt.indexOf('图片没了') < 0 && lostTxt.indexOf('没保存住') < 0) {
+    if (lostTxt.indexOf('没了') < 0 && lostTxt.indexOf('没保存住') < 0) {
       throw new Error('图丢了应该明确提示：' + lostTxt);
     }
   });

@@ -697,6 +697,10 @@
         layer.style.backgroundImage = '';
         var immediate = S.getWallpaperDisplayUrl(function (url) { place(url, false); });
         if (immediate) place(immediate, usingThumb);
+      } else if (w.kind === 'preset' && w.url) {
+        // 内置壁纸也走 <img>：加载失败能显示在诊断里（CSS 背景失败是无声的）
+        layer.style.backgroundImage = '';
+        place(w.url, false);
       } else {
         if (img) img.removeAttribute('src');
         layer.style.backgroundImage = w.image;
@@ -713,11 +717,13 @@
     var slider = $('wpDim');
     if (slider) slider.value = String(w.dim);
     $('wpDimVal').textContent = w.dim + '%';
-    $('wpState').textContent = (s.wallpaper === 'custom' && !S.getWallpaperImage())
-      ? '❌ 设置是「我的照片」但图片没了（清数据/空间不足/卸载重装都会这样）→ 请点「选择照片」重新选一张'
+    var lostTxt = (s.wallpaper === 'custom' && !S.getWallpaperImage());
+    $('wpState').textContent = lostTxt
+      ? '❌ 设置是「我的照片」但图片已经没了（卸载重装/清数据会清掉）→ 请重新点上面的「选择照片」选一张'
       : (w.kind === 'custom'
         ? '✅ 当前：我的照片（存本机，约 ' + Math.round(String(S.getWallpaperImage() || '').length * 0.75 / 1024) + 'KB）'
-        : (w.kind === 'preset' ? '当前：内置壁纸' : '当前：默认背景，可在上面选一张'));
+        : (w.kind === 'preset' ? '当前：内置壁纸（' + (w.url || '') + '）' : '当前：默认背景，可在上面选一张'));
+    if ($('wpPickAgain')) $('wpPickAgain').hidden = !lostTxt;
   }
 
   function pickWallpaper(id) {
@@ -1995,6 +2001,17 @@
     ].join('\n');
   }
 
+  function webglProbe() {
+    try {
+      var c = document.createElement('canvas');
+      var g = c.getContext('webgl') || c.getContext('experimental-webgl') || c.getContext('webgl2');
+      if (!g) return '不可用（WebView 禁用了 WebGL）';
+      var dbg = g.getExtension('WEBGL_debug_renderer_info');
+      var r = dbg ? g.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
+      return '可用' + (r ? '（' + String(r).slice(0, 60) + '）' : '');
+    } catch (e) { return '异常：' + (e && e.message); }
+  }
+
   function collectDiag() {
     var out = [];
     out.push('=== 工作台诊断 ' + new Date().toISOString() + ' ===');
@@ -2003,7 +2020,8 @@
       ? ('App/' + (window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : '?')) : '网页'));
     out.push('UA: ' + String(navigator.userAgent || '').slice(0, 110));
     out.push('indexedDB: ' + (typeof indexedDB !== 'undefined' ? '可用' : '不可用'));
-    out.push('WebGL: ' + (window.WBSprite ? (window.WBSprite.hasWebGL() ? '可用' : '不可用') : '未加载'));
+    out.push('WebGL 探测: ' + webglProbe());
+    out.push('WebGL(组件): ' + (window.WBSprite ? (window.WBSprite.hasWebGL() ? '可用' : '不可用') : '未加载'));
     out.push('3D 精灵: 设置=' + (S.getSettings().sprite3d === true) +
       '，已挂载=' + ((window.WBSprite && window.WBSprite.isMounted) ? window.WBSprite.isMounted() : false));
     out.push('--- 壁纸 ---');
@@ -2678,8 +2696,9 @@
       var on = !!e.target.checked;
       S.saveSettings({ sprite3d: on });
       if (!on) { if (window.WBSprite) window.WBSprite.destroy(); toast('已关闭 3D 精灵'); return; }
+      showView('home');                 // 精灵只在首页挂载，直接从「我的」跳回首页
       applySprite();
-      toast('3D 精灵已开启（点它说话，拖着它走）');
+      toast('3D 精灵已开启：回首页点它说话，拖着它走');
     });
     $('spriteAiSwitch').addEventListener('change', function (e) {
       var on = !!e.target.checked;
@@ -2687,6 +2706,7 @@
       toast(on ? '点头像会用 AI 聊天' : '精灵只说内置台词');
     });
     $('diagBtn').addEventListener('click', runDiag);
+    $('wpPickAgain').addEventListener('click', function () { $('wpFile').click(); });
 
     $('exportBtn').addEventListener('click', exportFile);
     $('copyBtn').addEventListener('click', copyJson);
@@ -2767,11 +2787,8 @@
 
     // 自定义壁纸存在 IndexedDB 里，异步读完再刷一次外观（否则会看不到自己的壁纸）
     S.loadWallpaperImage().then(function () {
-      // 读完了还是没有图 → 说明真的丢了（卸载/清数据/空间不足），退回内置壁纸并提示
-      if (S.getSettings().wallpaper === 'custom' && !S.getWallpaperImage()) {
-        S.saveSettings({ wallpaper: 'sakura' });
-        toast('自定义壁纸丢了（可能是清数据或卸载），已换成内置壁纸，请重新选一张');
-      }
+      // 注意：这里**不**自动改设置（以前偷偷换成就内置壁纸，用户完全不知道图丢了）
+      // 只把状态显示成 ❌ 并露出「重新选照片」按钮
       renderWallpaperGrid();
       applyWallpaper();
     });
