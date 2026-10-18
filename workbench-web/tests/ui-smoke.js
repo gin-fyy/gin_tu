@@ -783,14 +783,17 @@ function injectApkInstaller(w) {
     w.document.dispatchEvent(new w.Event('visibilitychange'));
     await sleep(60);
     if (!w.document.body.classList.contains('wb-wallpaper')) throw new Error('重启后没有自动应用壁纸');
-    if ($(w, '#wpState').textContent.indexOf('⚠️') >= 0) throw new Error('存住了就不该再提示没保存住');
+    if ($(w, '#wpState').textContent.indexOf('⚠️') >= 0 || $(w, '#wpState').textContent.indexOf('❌') >= 0) {
+      throw new Error('存住了就不该再提示图丢了');
+    }
 
     // 图真丢了（设置还写着 custom）→ 必须明确提示，而不是静默变回默认背景
     await w.WB.store.saveWallpaperImage('');
     w.document.dispatchEvent(new w.Event('visibilitychange'));
     await sleep(60);
-    if ($(w, '#wpState').textContent.indexOf('没保存住') < 0) {
-      throw new Error('图丢了应该明确提示：' + $(w, '#wpState').textContent);
+    var lostTxt = $(w, '#wpState').textContent;
+    if (lostTxt.indexOf('图片没了') < 0 && lostTxt.indexOf('没保存住') < 0) {
+      throw new Error('图丢了应该明确提示：' + lostTxt);
     }
   });
 

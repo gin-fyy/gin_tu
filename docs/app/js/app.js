@@ -714,10 +714,10 @@
     if (slider) slider.value = String(w.dim);
     $('wpDimVal').textContent = w.dim + '%';
     $('wpState').textContent = (s.wallpaper === 'custom' && !S.getWallpaperImage())
-      ? '⚠️ 你的自定义壁纸没保存住（上次大概空间不足），请重新点「选择照片」选一张'
+      ? '❌ 设置是「我的照片」但图片没了（清数据/空间不足/卸载重装都会这样）→ 请点「选择照片」重新选一张'
       : (w.kind === 'custom'
-        ? '当前：我的照片（已存本机；卸载 App 或清数据会丢）'
-        : (w.kind === 'preset' ? '当前：内置壁纸' : '当前：默认背景'));
+        ? '✅ 当前：我的照片（存本机，约 ' + Math.round(String(S.getWallpaperImage() || '').length * 0.75 / 1024) + 'KB）'
+        : (w.kind === 'preset' ? '当前：内置壁纸' : '当前：默认背景，可在上面选一张'));
   }
 
   function pickWallpaper(id) {
@@ -1964,6 +1964,75 @@
     try { Native.cancel({ notifications: [{ id: 9001 }] }).catch(function () {}); } catch (e) { /* ignore */ }
   }
 
+  /* ===================== 诊断（壁纸/3D/更新 一把梭） ===================== */
+  window.__wbErr = '';
+  window.addEventListener('error', function (e) {
+    try {
+      window.__wbErr = String((e && e.message) || 'error') + ' @' +
+        String(((e && e.filename) || '').split('/').pop() || '') + ':' + String((e && e.lineno) || '');
+    } catch (err) { /* ignore */ }
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    try {
+      var r = e && e.reason;
+      window.__wbErr = 'promise: ' + String((r && r.message) || r);
+    } catch (err) { /* ignore */ }
+  });
+
+  function diagWallpaper() {
+    var s = S.getSettings();
+    var full = String(S.getWallpaperImage() || '').length;
+    var thumb = String(S.getWallpaperThumb() || '').length;
+    var img = $('wallpaperImg');
+    var src = img ? (img.getAttribute('src') || '') : '';
+    return [
+      '壁纸设置: ' + (s.wallpaper || '(默认)'),
+      '完整图: ' + (full ? (Math.round(full * 0.75 / 1024) + 'KB') : '无'),
+      '缩略图: ' + (thumb ? (Math.round(thumb * 0.75 / 1024) + 'KB') : '无'),
+      'img src: ' + (src ? src.slice(0, 26) + '…' : '(空)'),
+      'img 状态: ' + (img ? (img.complete ? (img.naturalWidth + '×' + img.naturalHeight) : '未完成') : '无元素'),
+      '壁纸层: ' + ($('wallpaperLayer').hidden ? '隐藏' : '显示') + ' / body 类: ' + (document.body.className || '(无)')
+    ].join('\n');
+  }
+
+  function collectDiag() {
+    var out = [];
+    out.push('=== 工作台诊断 ' + new Date().toISOString() + ' ===');
+    out.push('版本: ' + (window.WB.APP_VERSION || '?'));
+    out.push('平台: ' + ((window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())
+      ? ('App/' + (window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : '?')) : '网页'));
+    out.push('UA: ' + String(navigator.userAgent || '').slice(0, 110));
+    out.push('indexedDB: ' + (typeof indexedDB !== 'undefined' ? '可用' : '不可用'));
+    out.push('WebGL: ' + (window.WBSprite ? (window.WBSprite.hasWebGL() ? '可用' : '不可用') : '未加载'));
+    out.push('3D 精灵: 设置=' + (S.getSettings().sprite3d === true) +
+      '，已挂载=' + ((window.WBSprite && window.WBSprite.isMounted) ? window.WBSprite.isMounted() : false));
+    out.push('--- 壁纸 ---');
+    out.push(diagWallpaper());
+    out.push('--- 更新 ---');
+    out.push('更新地址数: ' + updateBases().length);
+    out.push('上次更新提示: ' + ($('updHint') ? ($('updHint').textContent || '(空)') : '(无)'));
+    out.push('--- 最后报错 ---');
+    out.push(window.__wbErr || '(无)');
+    return out.join('\n');
+  }
+
+  function runDiag() {
+    var text = '';
+    try { text = collectDiag(); } catch (e) { text = '诊断本身出错：' + (e && e.message); }
+    $('diagOut').value = text;
+    var copied = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text);
+        copied = true;
+      }
+    } catch (e) { copied = false; }
+    if (!copied) {
+      try { $('diagOut').select(); copied = document.execCommand('copy'); } catch (e) { copied = false; }
+    }
+    toast(copied ? '诊断信息已复制，直接粘给我' : '诊断已生成，请长按文本框手动复制');
+  }
+
   /* ===================== 3D 精灵（按需加载 three.js） ===================== */
   var sprite3dReady = false;
 
@@ -2000,14 +2069,21 @@
     if (window.WBSprite && window.WBSprite.isMounted()) { window.WBSprite.setVisible(true); return; }
     ensure3D().then(function () {
       if (!window.WBSprite) return;
-      if (!window.WBSprite.hasWebGL()) { toast('这台设备不支持 WebGL，3D 精灵用不了'); return; }
+      if (!window.WBSprite.hasWebGL()) {
+        window.__wbErr = '3D: 设备不支持 WebGL';
+        toast('这台设备不支持 WebGL，3D 精灵用不了');
+        return;
+      }
       var ok = window.WBSprite.mount({
         container: document.body,
-        modelUrl: 'models/pet.glb',      // 有就用你的模型，没有就用程序化小鲸灵
+        modelUrl: 'models/pet.glb',      // 有就用你的模型，没有就用立绘/程序化小鲸灵
         onTap: spriteTap
       });
-      if (!ok) toast('3D 精灵启动失败（设备可能不支持 WebGL）');
-    }).catch(function () { toast('3D 组件加载失败，检查网络后重开 App'); });
+      if (!ok) { window.__wbErr = '3D: mount 返回 false'; toast('3D 精灵启动失败（原因已记录，去「外观」点自检）'); }
+    }).catch(function (e) {
+      window.__wbErr = '3D: ' + String((e && e.message) || e);
+      toast('3D 组件加载失败：' + String((e && e.message) || e));
+    });
   }
 
   function spriteTap() {
@@ -2610,6 +2686,7 @@
       S.saveSettings({ spriteAi: on });
       toast(on ? '点头像会用 AI 聊天' : '精灵只说内置台词');
     });
+    $('diagBtn').addEventListener('click', runDiag);
 
     $('exportBtn').addEventListener('click', exportFile);
     $('copyBtn').addEventListener('click', copyJson);
