@@ -293,8 +293,15 @@
         </div>
         <div class="row" style="margin-top:14px; align-items:center">
           <span class="tip" style="flex:0 0 52px">大小</span>
-          <input type="range" id="petOvSize" min="96" max="300" step="12" value="168" />
-          <span class="tip" id="petOvSizeVal" style="flex:0 0 52px; text-align:right">168 dp</span>
+          <input type="range" id="petOvSize" min="64" max="240" step="8" value="108" />
+          <span class="tip" id="petOvSizeVal" style="flex:0 0 52px; text-align:right">108 dp</span>
+        </div>
+        <div class="switch-row" style="margin-top:12px">
+          <div class="switch-left">
+            <div class="s-title">让它自己溜达</div>
+            <div class="s-sub">关掉就待在原地不动，方便你摆位置</div>
+          </div>
+          <input type="checkbox" id="petOvRoam" class="switch" checked />
         </div>
       </div>
 

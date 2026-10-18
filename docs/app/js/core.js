@@ -17,7 +17,7 @@
   var APP_TAG = 'my-workbench';
   var DATA_VERSION = 2;
   // 与 package.json 的 version 保持一致（tests/check-web.js 会校验，防止漂移）
-  var APP_VERSION = '2.0.0';
+  var APP_VERSION = '2.0.1';
   // 默认更新地址：打包时内置，装完即可直接「检查更新」。
   // 可以填多个（一行一个）：App 会同时问所有源，取「版本最新的那个」，
   // 这样某个 CDN 边缘还缓存着旧版也不影响；版本号相同时用排在前面的。
@@ -382,6 +382,7 @@
         glass: false,       // 液态玻璃效果
         glassBlur: 18,      // 玻璃模糊强度 px
         wheelSource: 'custom', // 转盘选项来源：custom | tasks
+        petRoam: true,         // 桌宠浮窗是否自己溜达
         petMortal: true,       // 宠物是否遵循生老病死（关掉就只变老、不会离世）
         sprite3d: false,       // 3D 精灵（WebGL；默认关，开了才加载 three.js）
         spriteAi: true,        // 点精灵时用 AI 聊天（没填 Key 就用内置台词）

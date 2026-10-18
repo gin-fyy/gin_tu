@@ -621,6 +621,9 @@
     $('petMortalSwitch').checked = s.petMortal !== false;
     $('sprite3dSwitch').checked = s.sprite3d === true;
     $('spriteAiSwitch').checked = s.spriteAi !== false;
+    if ($('petOvRoam')) $('petOvRoam').checked = s.petRoam !== false;
+    $('petOvSize').value = '108';
+    $('petOvSizeVal').textContent = '108 dp';
     refreshPetOverlay();
     $('versionLine').textContent = LOCAL_VERSION.version + (LOCAL_VERSION.versionCode ? ' (' + LOCAL_VERSION.versionCode + ')' : '');
     var ub = $('updateBaseInput');
@@ -2105,7 +2108,7 @@
       return (C && C.Plugins && C.Plugins.PetOverlay) ? C.Plugins.PetOverlay : null;
     } catch (e) { return null; }
   })();
-  var petOvSize = 168;
+  var petOvSize = 108;
 
   function renderPetOverlayState(info) {
     var el = $('petOvState');
@@ -2134,9 +2137,14 @@
 
   function showPetOverlay() {
     if (!PetOverlay) { toast('悬浮窗只有安卓 App 里能用'); return; }
-    PetOverlay.show({ sizeDp: petOvSize }).then(function (r) {
-      if (r && r.ok) { toast('桌宠已放出来，拖它试试'); renderPetOverlayState({ allowed: true, showing: true, sizeDp: petOvSize }); }
-      else toast('放不出来：' + ((r && r.reason) || '未知原因'));
+    var roam = $('petOvRoam') ? !!$('petOvRoam').checked : true;
+    PetOverlay.show({ sizeDp: petOvSize, roam: roam }).then(function (r) {
+      if (r && r.ok) {
+        toast('桌宠已放出来（' + petOvSize + 'dp），拖它试试');
+        renderPetOverlayState({ allowed: true, showing: true, sizeDp: petOvSize });
+      } else {
+        toast('放不出来：' + ((r && r.reason) || '未知原因'));
+      }
     }).catch(function (e) { toast('放不出来：' + ((e && e.message) || e)); });
   }
 
@@ -2835,6 +2843,18 @@
     $('petOvSize').addEventListener('change', function () {
       if (!PetOverlay) return;
       PetOverlay.setSize({ sizeDp: petOvSize }).catch(function () { /* ignore */ });
+    });
+    $('petOvRoam').addEventListener('change', function () {
+      var on = !!$('petOvRoam').checked;
+      S.saveSettings({ petRoam: on });
+      // 溜达是在页面加载时决定的，所以改完要重新放一次才生效
+      if (!PetOverlay) return;
+      PetOverlay.canDraw().then(function (info) {
+        if (!info || !info.showing) return;
+        PetOverlay.hide().then(function () {
+          setTimeout(showPetOverlay, 350);
+        }).catch(function () { /* ignore */ });
+      }).catch(function () { /* ignore */ });
     });
 
     $('exportBtn').addEventListener('click', exportFile);

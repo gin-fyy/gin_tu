@@ -13,13 +13,14 @@
     touch-action: none;
   }
   #pet {
-    position: absolute; left: 50%; bottom: 6%;
+    position: absolute; left: 50%; bottom: 2%;
     transform: translateX(-50%);
-    height: 92%; width: auto;
+    height: 96%; width: auto;
     transform-origin: 50% 100%;
     will-change: transform;
     pointer-events: none;
-    filter: drop-shadow(0 6px 10px rgba(10, 14, 30, 0.28));
+    image-rendering: auto;
+    filter: drop-shadow(0 4px 7px rgba(10, 14, 30, 0.26));
     transition: filter 0.2s ease;
   }
   #pet.happy { filter: drop-shadow(0 0 14px rgba(120, 190, 255, 0.85)); }
@@ -47,6 +48,9 @@
     side: 'img/pet-whale-side.webp',
     back: 'img/pet-whale-back.webp'
   };
+  // ?roam=0 → 不乱走（只在原地待着，方便控制）
+  var ROAM = true;
+  try { ROAM = new URLSearchParams(location.search).get('roam') !== '0'; } catch (e) { ROAM = true; }
   var cache = {};
   Object.keys(VIEWS).forEach(function (k) {
     var im = new Image();
@@ -152,8 +156,9 @@
   var LINES = ['嘿嘿', '在呢在呢', '别戳我啦', '今天也要加油', '我陪你', '摸鱼被抓到了'];
   function pickLine() { return LINES[Math.floor(Math.random() * LINES.length)]; }
 
-  // 自己溜达：慢慢在屏幕上走
+  // 自己溜达：慢慢在屏幕上走（可在面板里关掉）
   setInterval(function () {
+    if (!ROAM) return;
     if (state.dragging) return;
     var r = Math.random();
     if (r < 0.45) {
