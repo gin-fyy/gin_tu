@@ -758,6 +758,17 @@
       // 画质优先：长边不低于屏幕分辨率、至少 2160px，JPEG 92%
       var screenLong = Math.max(window.innerWidth || 0, window.innerHeight || 0);
       var cap = Math.max(2160, screenLong);
+
+      // 先看一眼原图有多大：太小的话铺满屏幕必然糊，提前告诉用户换一张
+      var probe = new Image();
+      probe.onload = function () {
+        var pw = probe.naturalWidth || probe.width || 0;
+        if (pw > 0 && pw < 720) {
+          toast('这张图只有 ' + pw + '×' + (probe.naturalHeight || probe.height) + '，铺满屏幕会模糊；建议换一张长边 ≥1440 的图');
+        }
+      };
+      probe.src = raw;
+
       compressImage(raw, cap, 0.92, function (full) {
         if (!full) { toast('这张图片读不了，换一张试试'); return; }
         if (full.length > 6000000) {
@@ -2092,10 +2103,26 @@
   function loadScriptOnce(src) {
     return new Promise(function (resolve, reject) {
       var s = document.createElement('script');
+      var done = false;
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        reject(new Error('加载超时：' + src));
+      }, 8000);
       s.src = src;
       s.async = true;
-      s.onload = function () { resolve(true); };
-      s.onerror = function () { reject(new Error('load ' + src)); };
+      s.onload = function () {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(true);
+      };
+      s.onerror = function () {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        reject(new Error('加载失败：' + src));
+      };
       document.head.appendChild(s);
     });
   }
@@ -2799,8 +2826,18 @@
     var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
     if ('serviceWorker' in navigator) {
       if (isNative) {
+        // 注销旧的 SW 之后，**当前页面在刷新前仍被它接管**（脚本请求照样挂着），
+        // 所以注销完要强制刷新一次。用 localStorage 打标记，避免反复刷新。
         navigator.serviceWorker.getRegistrations().then(function (list) {
+          var had = (list || []).length;
           (list || []).forEach(function (r) { try { r.unregister(); } catch (e) { /* ignore */ } });
+          var controlled = !!navigator.serviceWorker.controller;
+          var fixed = false;
+          try { fixed = localStorage.getItem('wb_sw_fixed') === '1'; } catch (e) { /* ignore */ }
+          if ((had > 0 || controlled) && !fixed) {
+            try { localStorage.setItem('wb_sw_fixed', '1'); } catch (e) { /* ignore */ }
+            try { location.reload(); } catch (e) { /* ignore */ }
+          }
         }).catch(function () { /* ignore */ });
         try {
           if (window.caches && caches.keys) {
